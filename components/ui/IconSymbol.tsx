@@ -1,5 +1,5 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { SymbolWeight } from "expo-symbols";
+type SymbolWeight = 'ultraLight' | 'thin' | 'light' | 'regular' | 'medium' | 'semibold' | 'bold' | 'heavy' | 'black';
 import { OpaqueColorValue, StyleProp, ViewStyle } from "react-native";
 
 // Map SF Symbol names used in navigation to MaterialIcons equivalents (cross-platform)
