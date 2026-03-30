@@ -1,28 +1,20 @@
-/**
- * Central color palette for light/dark theming.
- * These tokens are used by ThemedText, ThemedView, and navigation.
- */
-const palette = {
-  primary: "#0ea5e9",
-  white:   "#ffffff",
-  black:   "#0c0a09",
-};
+import { Palette } from './Theme';
 
 export const Colors = {
   light: {
-    text:       "#1c1917",
-    background: "#ffffff",
-    tint:       palette.primary,
-    icon:       "#78716c",
-    tabIconDefault:  "#78716c",
-    tabIconSelected: palette.primary,
+    text:            Palette.body,
+    background:      Palette.bg,
+    tint:            Palette.primary,
+    icon:            Palette.muted,
+    tabIconDefault:  Palette.muted,
+    tabIconSelected: Palette.primary,
   },
   dark: {
-    text:       "#fafaf9",
-    background: "#1c1917",
-    tint:       "#38bdf8",
-    icon:       "#a8a29e",
-    tabIconDefault:  "#a8a29e",
-    tabIconSelected: "#38bdf8",
+    text:            Palette.dark.body,
+    background:      Palette.dark.bg,
+    tint:            '#3D52E8',
+    icon:            Palette.dark.muted,
+    tabIconDefault:  Palette.dark.muted,
+    tabIconSelected: '#3D52E8',
   },
 };

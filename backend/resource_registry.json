@@ -1,0 +1,509 @@
+{
+  "resources": [
+    {
+      "id": "96fc2ac081b7",
+      "title": "ШИНЖЛЭХ УХААН, ТЕХНОЛОГИЙН ИХ СУРГУУЛИЙН ДҮРЭМ",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/27/1-.pdf",
+      "category": "rule",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:33:38.947918+00:00"
+    },
+    {
+      "id": "97b1a1bfaf53",
+      "title": "ШУТИС-ИЙН УДИРДАХ ЗӨВЛӨЛИЙН ДҮРЭМ",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/27/2-_pcFUSXG.pdf",
+      "category": "rule",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:33:38.948152+00:00"
+    },
+    {
+      "id": "2fdd60434284",
+      "title": "ШУТИС-ИЙН БАГШ, АЖИЛТНЫ ЁС ЗҮЙН ДҮРЭМ",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/27/3-_UiTgtBv.pdf",
+      "category": "rule",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:33:38.948154+00:00"
+    },
+    {
+      "id": "927590d26556",
+      "title": "ШУТИС-ИЙН ОЮУТНЫ ЁС ЗҮЙН ДҮРЭМ",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/27/4_MDAZoEF.pdf",
+      "category": "rule",
+      "section_id": "student-life",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:33:38.948156+00:00"
+    },
+    {
+      "id": "b8ea11d16a9d",
+      "title": "ШУТИС-ийн оюутны байрны журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/39.pdf",
+      "category": "regulation",
+      "section_id": "dormitory",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:33:38.948158+00:00"
+    },
+    {
+      "id": "358cb2160706",
+      "title": "ШУТИС-ийн бакалаврын төгсөлтийн журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/12/30/20251224a408.PDF",
+      "category": "regulation",
+      "section_id": "graduation",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:33:38.948160+00:00"
+    },
+    {
+      "id": "3315f078f545",
+      "title": "ШУТИС-ийн бакалаврын хөтөлбөрт оюутан элсүүлэх журам 2025-2026",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/27-2025-2026.pdf",
+      "category": "regulation",
+      "section_id": "admission",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:33:38.948161+00:00"
+    },
+    {
+      "id": "acf17aef85e8",
+      "title": "ШУТИС-ийн суралцагчдад тэтгэлэг, кредитийн урамшуулал олгох журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/26-.pdf",
+      "category": "regulation",
+      "section_id": "scholarships",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:33:38.948163+00:00"
+    },
+    {
+      "id": "c3b404fd73af",
+      "title": "ШУТИС-ийн сургалтын төлбөрийн мэдээлэл",
+      "url": "https://www.must.edu.mn/mn/page/193",
+      "category": "tuition",
+      "section_id": "scholarships",
+      "source_type": "web_page",
+      "added_at": "2026-03-29T16:35:06.978025+00:00"
+    },
+    {
+      "id": "1f973dd6d206",
+      "title": "Оюутны үйлчилгээний нэгдсэн хуанли",
+      "url": "https://www.must.edu.mn/media/uploads/2025/12/15/oyizzp.pdf",
+      "category": "rule",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:08.316605+00:00"
+    },
+    {
+      "id": "db1c92e0df0e",
+      "title": "ШУТИС-ийн Хөдөлмөрийн дотоод журам",
+      "url": "https://www.must.edu.mn/media/uploads/2026/01/09/014.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:14.895038+00:00"
+    },
+    {
+      "id": "970db19a9204",
+      "title": "ШУТИС-ийн Эрдмийн зөвлөлийн үйл ажиллагааны журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/2.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:15.059012+00:00"
+    },
+    {
+      "id": "a39ab692654c",
+      "title": "ШУТИС-ийн Ректорын зөвлөлийн үйл ажиллагааг зохицуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/3-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:15.809332+00:00"
+    },
+    {
+      "id": "9efa1b256361",
+      "title": "ШУТИС-ийн Захиргааны зөвлөлийн бүрэлдэхүүн, ажиллах удирдамж",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/4-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:16.168233+00:00"
+    },
+    {
+      "id": "8be301de013b",
+      "title": "ШУТИС-ийн Ахмадын зөвлөлийн үйл ажиллагааг зохицуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/5-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:16.843933+00:00"
+    },
+    {
+      "id": "d1a5a9f0a50a",
+      "title": "ШУТИС-ийн Мэргэжлийн тэнхимийн үйл ажиллагааг зохицуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/6-_bQTKMRX.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:17.872196+00:00"
+    },
+    {
+      "id": "9e88cb2aa2a3",
+      "title": "ШУТИС-ийн Эрдэм шинжилгээний хүрээлэнгийн үйл ажиллагааны журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/7-_8tUeNvr.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:18.513608+00:00"
+    },
+    {
+      "id": "378885c04b39",
+      "title": "ШУТИС-д Судалгааны төв байгуулж, ажиллуулах нийтлэг журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/8-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:20.299287+00:00"
+    },
+    {
+      "id": "364daca8b639",
+      "title": "ШУТИС-ийн дэргэд Гарааны компани байгуулж, ажиллуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/9-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:20.910232+00:00"
+    },
+    {
+      "id": "24a4397d5acc",
+      "title": "ШУТИС-ийн Хөтөлбөрийн хорооны үйл ажиллагааг зохицуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/11/18/1020251106-352.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:22.923660+00:00"
+    },
+    {
+      "id": "b614254f2a01",
+      "title": "ШУТИС-ийн Эндаументын сангийн журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/11-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:23.612358+00:00"
+    },
+    {
+      "id": "1ad466873512",
+      "title": "ШУТИС-ийн Барааны тэмдгийг ашиглах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/12-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:24.400775+00:00"
+    },
+    {
+      "id": "771a12055cc5",
+      "title": "ШУТИС-ийн Технологи дамжуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/13-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:25.091869+00:00"
+    },
+    {
+      "id": "0774128c5b24",
+      "title": "ШУТИС-ийн Үйл ажиллагааг төлөвлөх, тайлагнах, хяналт-шинжилгээ, үнэлгээ хийх журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/14-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:28.020692+00:00"
+    },
+    {
+      "id": "7771421ca31a",
+      "title": "ШУТИС-ийн Гэрээ, санамж бичиг байгуулах, бүртгэх, хянах, дүгнэх журам",
+      "url": "https://www.must.edu.mn/media/uploads/2026/02/06/image_007.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:29.345920+00:00"
+    },
+    {
+      "id": "c37d820ac3b4",
+      "title": "ШУТИС-ийн Албан хэрэг хөтлөлтийн журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/11/03/-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:31.997232+00:00"
+    },
+    {
+      "id": "4baceca2a3fe",
+      "title": "ШУТИС-ийн Архивын үйл ажиллагааны журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/11/03/-_0ioMUDK.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:34.597383+00:00"
+    },
+    {
+      "id": "616fa3b4825d",
+      "title": "Өргөдөл, гомдол хүлээн авч, шийдвэрлэх журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/17.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:36.100963+00:00"
+    },
+    {
+      "id": "d73f79c2e478",
+      "title": "ШУТИС-ийн нууцын журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/18-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:36.786754+00:00"
+    },
+    {
+      "id": "66022448acdb",
+      "title": "Хүний нөөцийн бүрдүүлэлт, сонгон шалгаруулалтын журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/19.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:37.172931+00:00"
+    },
+    {
+      "id": "d2a7bad5a6eb",
+      "title": "Гадаад багш, зочин профессор, мэргэжилтнийг урьж ажиллуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/20.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:37.388775+00:00"
+    },
+    {
+      "id": "2180dd919c39",
+      "title": "Профессор, багшийн ажлын гүйцэтгэлийг кредитээр тооцож, үнэлэх журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/21.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:41.309510+00:00"
+    },
+    {
+      "id": "44ca915a7700",
+      "title": "ШУТИС-ийн Профессор, багш, ажилтан гадаадад томилолтоор ажиллах, суралцах, мэргэжил дээшлүүлэх журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/22-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:41.581011+00:00"
+    },
+    {
+      "id": "6a130d7d4fb1",
+      "title": "Ахисан түвшний сургалт, судалгааны үйл ажиллагааг зохицуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/23_hTBlFpa.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:45.272318+00:00"
+    },
+    {
+      "id": "4210558eae33",
+      "title": "ШУТИС-ийн Бакалаврын сургалтын үйл ажиллагааг зохицуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/24-_G6Ofu2w.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:50.582955+00:00"
+    },
+    {
+      "id": "d300729f0a0d",
+      "title": "ШУТИС-д Гадаадын иргэнийг суралцуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/25-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:50.904279+00:00"
+    },
+    {
+      "id": "10bb4f6e7634",
+      "title": "ШУТИС-ийн Эрдмийн ба хүндэт цол олгох журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/28-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:57.036731+00:00"
+    },
+    {
+      "id": "b57405f24456",
+      "title": "ШУТИС-ийн Оны шилдэг багш шалгаруулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/29-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:57.324979+00:00"
+    },
+    {
+      "id": "c71f657b90fc",
+      "title": "Шагнал урамшууллын журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/30.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:57.586557+00:00"
+    },
+    {
+      "id": "f61401504340",
+      "title": "ШУТИС-ийн багш, ажилтны ажлын гүйцэтгэлийг үнэлж, урамшуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/31-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:58.014290+00:00"
+    },
+    {
+      "id": "208bdf99a30e",
+      "title": "ШУТИС-ийн Профессор багш нарын ном, сурах бичиг, сургалтын материал бичиж, хэвлүүлэхэд баримтлах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/32-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:35:58.649458+00:00"
+    },
+    {
+      "id": "0841e33a6b3c",
+      "title": "ШУТИС-ийн Ёслолын хувцасны загвар хэрэглэх журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/33-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:35:59.852303+00:00"
+    },
+    {
+      "id": "07d8de8b484a",
+      "title": "Санхүүгийн үйл ажиллагааг зохицуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/34.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:36:00.034972+00:00"
+    },
+    {
+      "id": "3ae8916ca3f8",
+      "title": "ШУТИС-д Эрдэм шинжилгээний төсөл, гэрээт ажил хэрэгжүүлэх, судалгаа инновацын үйл ажиллагааг санхүүжүүлэх журам",
+      "url": "https://www.must.edu.mn/media/uploads/2026/01/02/20251224-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:36:00.416832+00:00"
+    },
+    {
+      "id": "6713d2836c1f",
+      "title": "ШУТИС-ийн цаг бүртгэлийн түр журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/36-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:36:00.670635+00:00"
+    },
+    {
+      "id": "902bb702ff62",
+      "title": "ШУТИС-д бараа, ажил, үйлчилгээ худалдан авах үйл ажиллагааг зохион байгуулах, хэрэгжүүлэх журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/37-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:36:01.545601+00:00"
+    },
+    {
+      "id": "fc47a7bb68a8",
+      "title": "ШУТИС-ийн Шинжлэх ухаан, технологийн номын сангийн үйл ажиллагааг зохицуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/38-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:36:02.564823+00:00"
+    },
+    {
+      "id": "f16906ecc6f1",
+      "title": "ШУТИС-Эрүүл мэндийн төвийн ажиллах дотоод журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/40-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:36:03.957836+00:00"
+    },
+    {
+      "id": "4e50ae9e0f89",
+      "title": "ШУТИС-ийн Музейн үйл ажиллагааг зохицуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/41-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:36:04.722671+00:00"
+    },
+    {
+      "id": "5206ab892b41",
+      "title": "ШУТИС-ийн Хэвлэлийн газрын үйл ажиллагааг зохицуулах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/42-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:36:05.282077+00:00"
+    },
+    {
+      "id": "0d77c61faa86",
+      "title": "Судалгааны ажлын хуулбарлалтыг шалгах журам",
+      "url": "https://www.must.edu.mn/media/uploads/2025/12/09/55-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:36:05.558703+00:00"
+    },
+    {
+      "id": "d53d72fbcbe8",
+      "title": "\"MUST journal of science and technology\" Эрдэм шинжилгээний сэтгүүлийн журам",
+      "url": "http://must.edu.mn/media/uploads/2025/12/09/must-journal-.pdf",
+      "category": "regulation",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:36:05.863823+00:00"
+    },
+    {
+      "id": "b7182a6bde5f",
+      "title": "Төлбөрт үйлчилгээний төрөл, төлбөрийн хэмжээг шинэчлэн тогтоох, эрх олгох тухай",
+      "url": "https://www.must.edu.mn/media/uploads/2026/03/25/20260216-63.pdf",
+      "category": "order",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:36:06.935440+00:00"
+    },
+    {
+      "id": "69f3e7b4ac3c",
+      "title": "Зардлын норм шинэчлэн батлах тухай",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/2_uUcgoJn.pdf",
+      "category": "order",
+      "section_id": "introduction",
+      "source_type": "text_pdf",
+      "added_at": "2026-03-29T16:36:07.414675+00:00"
+    },
+    {
+      "id": "2ed863ccec5f",
+      "title": "Цагийн ажлын төрөл, жишиг хөлсний хэмжээ батлах тухай",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/3.pdf",
+      "category": "order",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:36:07.486033+00:00"
+    },
+    {
+      "id": "86f5ffe5932d",
+      "title": "Багшийн хөгжлийн багийн бүрэлдэхүүнийг шинэчлэн байгуулах тухай",
+      "url": "https://www.must.edu.mn/media/uploads/2025/10/28/4.pdf",
+      "category": "order",
+      "section_id": "introduction",
+      "source_type": "scanned_pdf",
+      "added_at": "2026-03-29T16:36:07.563556+00:00"
+    }
+  ],
+  "last_updated": "2026-03-29T16:36:07.563559+00:00"
+}

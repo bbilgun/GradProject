@@ -10,7 +10,10 @@ const API_BASE =
 
 export const Config = {
   API_BASE,
-  SEARCH_ENDPOINT: `${API_BASE}/search`,
-  SUMMARIZE_ENDPOINT: `${API_BASE}/summarize`,
-  SYNC_ENDPOINT: `${API_BASE}/sync-web`,
+  SEARCH_ENDPOINT:          `${API_BASE}/search`,
+  SUMMARIZE_ENDPOINT:       `${API_BASE}/summarize`,
+  SYNC_ENDPOINT:            `${API_BASE}/sync-web`,
+  RESOURCES_ENDPOINT:       `${API_BASE}/resources`,
+  RESOURCES_RECENT_ENDPOINT:`${API_BASE}/resources/recent`,
+  CHAT_ENDPOINT:            `${API_BASE}/chat`,
 } as const;

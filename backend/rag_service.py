@@ -72,6 +72,9 @@ class Chunk:
     section_title: str
     text: str
     chunk_index: int
+    source_url: str = ""    # Original URL the chunk came from
+    category: str = ""      # "rule" | "regulation" | "order" | "tuition" | "handbook" | "pdf"
+    priority: bool = False  # True → score is boosted in ranking
 
 
 @dataclass
@@ -81,12 +84,14 @@ class SearchResult:
     text: str
     score: float
     chunk_index: int
+    source_url: str = ""
+    category: str = ""
 
 
 class RAGService:
     MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 
-    def __init__(self, handbook_path: str):
+    def __init__(self, handbook_path: str | None = None):
         self.handbook_path = handbook_path
         self.model: SentenceTransformer | None = None
         self.index: faiss.IndexFlatIP | None = None
@@ -120,32 +125,85 @@ class RAGService:
         self._ready = True
         print("[RAG] Ready ✓")
 
+    def build_empty(self) -> None:
+        """
+        Load the embedding model and create an empty FAISS index.
+        Used when no handbook file is present — the index is populated
+        entirely via add_chunks() (PDF sync).
+        """
+        print("[RAG] Loading model (empty-index mode)…")
+        self.model = SentenceTransformer(self.MODEL_NAME)
+        # Determine embedding dimension with a single probe encode
+        probe = self.model.encode(["init"], normalize_embeddings=True)
+        dim = probe.shape[1]
+        self.index = faiss.IndexFlatIP(dim)
+        self._ready = True
+        print(f"[RAG] Empty index ready (dim={dim}) ✓")
+
+    def add_chunks(self, new_chunks: List[Chunk]) -> int:
+        """
+        Embed *new_chunks* and insert them into the live FAISS index.
+        Safe to call after build() or build_empty().
+
+        Returns the number of chunks actually added.
+        """
+        if not self._ready:
+            raise RuntimeError("RAGService.build() / build_empty() must be called first.")
+        if not new_chunks:
+            return 0
+
+        embeddings = self._embed([c.text for c in new_chunks])
+        self.index.add(embeddings.astype(np.float32))
+        self.chunks.extend(new_chunks)
+        print(f"[RAG] +{len(new_chunks)} chunks  (total: {len(self.chunks)})")
+        return len(new_chunks)
+
+    # Score added to priority chunks (tuition, key regulations) to surface them first
+    PRIORITY_BOOST = 0.15
+
     def search(self, query: str, top_k: int = 6) -> List[SearchResult]:
-        """Semantic search across handbook chunks."""
+        """
+        Semantic search across all indexed chunks (handbook + PDFs + web).
+        Priority chunks (e.g. tuition) receive a score boost so they
+        surface at the top for relevant financial/fee queries.
+        """
         if not self._ready:
             raise RuntimeError("RAGService not built yet. Call build() first.")
 
         q_emb = self._embed([query])
-        scores, indices = self.index.search(q_emb.astype(np.float32), top_k * 2)
+        # Fetch extra candidates so post-boost re-ranking can promote priority chunks
+        raw_k = min(top_k * 4, len(self.chunks)) if self.chunks else top_k * 4
+        scores, indices = self.index.search(q_emb.astype(np.float32), raw_k)
 
-        seen_sections: set[str] = set()
-        results: List[SearchResult] = []
-
+        # Build scored candidates, applying priority boost
+        candidates: list[tuple[float, Chunk]] = []
         for score, idx in zip(scores[0], indices[0]):
             if idx == -1:
                 continue
             chunk = self.chunks[idx]
-            # De-duplicate: one result per section (highest score wins)
-            if chunk.section_id in seen_sections:
+            adjusted = float(score) + (self.PRIORITY_BOOST if chunk.priority else 0.0)
+            candidates.append((adjusted, chunk))
+
+        # Sort by adjusted score descending
+        candidates.sort(key=lambda x: x[0], reverse=True)
+
+        # De-duplicate by section_id (keep highest-scored chunk per section)
+        seen: set[str] = set()
+        results: List[SearchResult] = []
+        for adjusted_score, chunk in candidates:
+            dedup_key = f"{chunk.section_id}::{chunk.source_url}"
+            if dedup_key in seen:
                 continue
-            seen_sections.add(chunk.section_id)
+            seen.add(dedup_key)
             results.append(
                 SearchResult(
                     section_id=chunk.section_id,
                     section_title=chunk.section_title,
                     text=chunk.text[:400],
-                    score=float(score),
+                    score=adjusted_score,
                     chunk_index=chunk.chunk_index,
+                    source_url=chunk.source_url,
+                    category=chunk.category,
                 )
             )
             if len(results) >= top_k:

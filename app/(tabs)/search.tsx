@@ -1,277 +1,277 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
+  Image,
   ScrollView,
   TouchableOpacity,
-  Keyboard,
   Animated,
+  Easing,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
-import { SearchResultSkeleton } from '@/components/SkeletonLoader';
-import HandbookService, { HandbookSection } from '@/services/handbook_service';
-import { Config } from '@/constants/config';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useBookmarks } from '@/contexts/BookmarkContext';
+import HandbookService from '@/services/handbook_service';
+import { EaseOutExpo, Space } from '@/constants/Theme';
 
-interface SearchResult {
-  section: HandbookSection;
-  snippet: string;
-  score: number;
-}
+// ─── Design tokens ────────────────────────────────────────────────
 
-export default function SearchScreen() {
+const BLUE   = '#08158F';
+const GOLD   = '#FFC20D';
+const BG     = '#F8F9FA';
+const WHITE  = '#FFFFFF';
+const MUTED  = '#6B7280';
+const BORDER = 'rgba(8,21,143,0.09)';
+
+const EASE = Easing.bezier(...EaseOutExpo);
+
+// ─── Screen ───────────────────────────────────────────────────────
+
+export default function BookmarksScreen() {
   const router = useRouter();
-  const isDark = useColorScheme() === 'dark';
-  const inputRef = useRef<TextInput>(null);
+  const { bookmarks, toggle } = useBookmarks();
 
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const savedSections = HandbookService.getAllSections().filter(s => bookmarks.has(s.id));
 
-  const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) return;
-    Keyboard.dismiss();
-    setLoading(true);
-    setSearched(true);
+  // Build rows of 2
+  const rows: (typeof savedSections)[] = [];
+  for (let i = 0; i < savedSections.length; i += 2) {
+    rows.push(savedSections.slice(i, i + 2));
+  }
 
-    try {
-      const res = await fetch(Config.SEARCH_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, top_k: 6 }),
-        signal: AbortSignal.timeout(5000),
-      });
-      const data = await res.json();
-
-      const mapped: SearchResult[] = (data.results ?? []).map((r: any) => {
-        const section = HandbookService.getSectionBySlug(r.section_id) ?? {
-          id: r.section_id,
-          title: r.section_title ?? r.section_id,
-          titleEn: '',
-          description: '',
-          icon: 'article',
-          color: '#EFF6FF',
-          darkColor: '#1E3A5F',
-          content: '',
-        };
-        return { section, snippet: r.text ?? '', score: r.score ?? 0 };
-      });
-      setResults(mapped);
-    } catch {
-      const offline = HandbookService.searchLocal(q);
-      setResults(offline.map((s) => ({ section: s, snippet: s.description, score: 1 })));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const inputBg = isDark ? '#1e293b' : '#f1f5f9';
-  const inputColor = isDark ? '#f8fafc' : '#0f172a';
-  const placeholderColor = isDark ? '#64748b' : '#94a3b8';
-
-  return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: isDark ? '#0f172a' : '#fff' }}>
-      {/* Header */}
-      <View className="px-5 pt-5 pb-3">
-        <Text className="text-2xl font-bold mb-4" style={{ color: isDark ? '#f8fafc' : '#0f172a' }}>
-          Хайлт
-        </Text>
-
-        <View
-          className="flex-row items-center rounded-2xl px-4"
-          style={{ backgroundColor: inputBg, height: 50 }}
-        >
-          <MaterialIcons name="search" size={22} color={placeholderColor} />
-          <TextInput
-            ref={inputRef}
-            className="flex-1 ml-2 text-base"
-            style={{ color: inputColor }}
-            placeholder="Тэтгэлэг, кредит, хичээл..."
-            placeholderTextColor={placeholderColor}
-            value={query}
-            onChangeText={setQuery}
-            returnKeyType="search"
-            onSubmitEditing={() => doSearch(query)}
-            autoCorrect={false}
-          />
-          {query.length > 0 && (
-            <TouchableOpacity onPress={() => { setQuery(''); setResults([]); setSearched(false); }}>
-              <MaterialIcons name="cancel" size={18} color={placeholderColor} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <TouchableOpacity
-          onPress={() => doSearch(query)}
-          disabled={!query.trim() || loading}
-          className="mt-3 rounded-2xl py-3 items-center"
-          style={{ backgroundColor: query.trim() ? '#0284c7' : (isDark ? '#1e293b' : '#e2e8f0') }}
-        >
-          <Text
-            className="font-semibold text-base"
-            style={{ color: query.trim() ? '#fff' : placeholderColor }}
-          >
-            Хайх
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        className="flex-1 px-5"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
-      >
-        {/* Shimmer skeleton while loading */}
-        {loading && (
-          <View>
-            {[1, 2, 3, 4].map((i) => (
-              <SearchResultSkeleton key={i} />
-            ))}
-          </View>
-        )}
-
-        {/* Results */}
-        {!loading && results.length > 0 && (
-          <FadeIn>
-            <Text
-              className="text-xs font-semibold mb-3 mt-1"
-              style={{ color: isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8' }}
-            >
-              {results.length} үр дүн олдлоо
-            </Text>
-            {results.map((r, idx) => (
-              <SearchResultCard
-                key={`${r.section.id}-${idx}`}
-                result={r}
-                isDark={isDark}
-                onPress={() =>
-                  router.push({ pathname: '/handbook/[slug]' as any, params: { slug: r.section.id } })
-                }
-              />
-            ))}
-          </FadeIn>
-        )}
-
-        {/* Empty state */}
-        {!loading && searched && results.length === 0 && (
-          <FadeIn>
-            <View className="items-center mt-16">
-              <MaterialIcons name="search-off" size={48} color={isDark ? '#334155' : '#cbd5e1'} />
-              <Text className="mt-3 text-base font-semibold" style={{ color: isDark ? '#475569' : '#94a3b8' }}>
-                Үр дүн олдсонгүй
-              </Text>
-              <Text className="text-sm mt-1 text-center" style={{ color: isDark ? '#334155' : '#cbd5e1' }}>
-                Өөр түлхүүр үг ашиглаад дахин хайна уу
-              </Text>
-            </View>
-          </FadeIn>
-        )}
-
-        {!loading && !searched && <QuickAccess isDark={isDark} onChipPress={(q) => doSearch(q)} />}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Fade-in wrapper using built-in Animated
-
-function FadeIn({ children }: { children: React.ReactNode }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(8)).current;
-
+  // Header entrance animation
+  const headerOp = useRef(new Animated.Value(0)).current;
+  const headerY  = useRef(new Animated.Value(-10)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 280, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 280, useNativeDriver: true }),
+      Animated.timing(headerOp, { toValue: 1, duration: 380, easing: EASE, useNativeDriver: true }),
+      Animated.timing(headerY,  { toValue: 0, duration: 380, easing: EASE, useNativeDriver: true }),
     ]).start();
   }, []);
 
   return (
-    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-      {children}
+    <View style={{ flex: 1, backgroundColor: BG }}>
+      <StatusBar barStyle="light-content" backgroundColor={BLUE} />
+
+      {/* ── Blue header ─────────────────────────────────────── */}
+      <SafeAreaView edges={['top']} style={{ backgroundColor: BLUE }}>
+        <Animated.View style={{
+          opacity: headerOp,
+          transform: [{ translateY: headerY }],
+          paddingHorizontal: 20,
+          paddingTop: 10,
+          paddingBottom: 24,
+        }}>
+          {/* Top row: logo */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <Image
+              source={require('@/assets/images/main_logo.png')}
+              style={{ width: 36, height: 36, borderRadius: 8 }}
+              resizeMode="contain"
+            />
+            <View style={{
+              width: 36, height: 36, borderRadius: 18,
+              backgroundColor: 'rgba(255,255,255,0.13)',
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <MaterialIcons name="bookmark" size={19} color={GOLD} />
+            </View>
+          </View>
+          <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 26, color: WHITE, letterSpacing: -0.5, marginBottom: 4 }}>
+            Хадгалсан
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {savedSections.length > 0 && (
+              <View style={{ backgroundColor: GOLD, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 11, color: '#1A1A2E' }}>
+                  {savedSections.length} бүлэг
+                </Text>
+              </View>
+            )}
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: 'rgba(255,255,255,0.60)' }}>
+              {savedSections.length > 0 ? 'хадгалагдсан' : 'Хадгалсан бүлэг байхгүй байна'}
+            </Text>
+          </View>
+        </Animated.View>
+        {/* Rounded bottom edge */}
+        <View style={{ height: 22, backgroundColor: BG, borderTopLeftRadius: 22, borderTopRightRadius: 22, marginTop: -1 }} />
+      </SafeAreaView>
+
+      {/* ── Content ─────────────────────────────────────────── */}
+      {savedSections.length === 0 ? (
+        <EmptyState onBrowse={() => router.push('/(tabs)/' as any)} />
+      ) : (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: Space.gutter, paddingBottom: 110 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {rows.map((row, rowIdx) => (
+            <View key={rowIdx} style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
+              {row[0] && (
+                <BookmarkCard
+                  section={row[0]}
+                  onPress={() => router.push({ pathname: '/handbook/[slug]' as any, params: { slug: row[0].id } })}
+                  onRemove={() => toggle(row[0].id)}
+                />
+              )}
+              {row[1] ? (
+                <BookmarkCard
+                  section={row[1]}
+                  onPress={() => router.push({ pathname: '/handbook/[slug]' as any, params: { slug: row[1].id } })}
+                  onRemove={() => toggle(row[1].id)}
+                />
+              ) : (
+                <View style={{ flex: 1 }} />
+              )}
+            </View>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+// ─── Bookmark Card ────────────────────────────────────────────────
+
+function BookmarkCard({
+  section, onPress, onRemove,
+}: {
+  section: ReturnType<typeof HandbookService.getAllSections>[number];
+  onPress: () => void;
+  onRemove: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const EASE  = Easing.bezier(...EaseOutExpo);
+
+  const pressIn  = () => Animated.timing(scale, { toValue: 0.96, duration: 100, easing: EASE, useNativeDriver: true }).start();
+  const pressOut = () => Animated.timing(scale, { toValue: 1,    duration: 180, easing: EASE, useNativeDriver: true }).start();
+
+  return (
+    <Animated.View style={{ transform: [{ scale }], flex: 1 }}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onPress}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        style={{
+          backgroundColor: WHITE,
+          borderRadius: 16,
+          padding: 16,
+          minHeight: 138,
+          borderWidth: 1,
+          borderColor: BORDER,
+          shadowColor: 'rgba(8,21,143,0.06)',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 1,
+          shadowRadius: 8,
+          elevation: 2,
+          justifyContent: 'space-between',
+        }}
+      >
+        {/* Icon row + remove button */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <View style={{
+            width: 44, height: 44, borderRadius: 12,
+            backgroundColor: 'rgba(8,21,143,0.08)',
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <MaterialIcons name={section.icon as any} size={24} color={BLUE} />
+          </View>
+          <TouchableOpacity
+            onPress={onRemove}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{
+              width: 28, height: 28, borderRadius: 8,
+              backgroundColor: 'rgba(8,21,143,0.06)',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <MaterialIcons name="bookmark" size={16} color={BLUE} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Text */}
+        <View>
+          <Text numberOfLines={2} style={{
+            fontFamily: 'Inter_700Bold', fontSize: 13,
+            color: BLUE, lineHeight: 18, marginBottom: 3,
+          }}>
+            {section.title}
+          </Text>
+          <Text numberOfLines={1} style={{
+            fontFamily: 'Inter_400Regular', fontSize: 11, color: MUTED,
+          }}>
+            {section.description}
+          </Text>
+        </View>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ─── Empty State ──────────────────────────────────────────────────
 
-function SearchResultCard({
-  result,
-  isDark,
-  onPress,
-}: {
-  result: SearchResult;
-  isDark: boolean;
-  onPress: () => void;
-}) {
-  const cardBg = isDark ? '#1e293b' : '#f8fafc';
-  const sectionBg = isDark ? result.section.darkColor : result.section.color;
+function EmptyState({ onBrowse }: { onBrowse: () => void }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  const op    = useRef(new Animated.Value(0)).current;
+  const EASE  = Easing.bezier(...EaseOutExpo);
+
+  useEffect(() => {
+    Animated.timing(op, { toValue: 1, duration: 400, easing: EASE, useNativeDriver: true }).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.08, duration: 1000, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1,    duration: 1000, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.75}
-      onPress={onPress}
-      style={{ backgroundColor: cardBg, borderRadius: 16, padding: 14, marginBottom: 10 }}
-    >
-      <View className="flex-row items-center mb-2">
-        <View
-          style={{
-            width: 38, height: 38, borderRadius: 19,
-            backgroundColor: sectionBg,
-            alignItems: 'center', justifyContent: 'center', marginRight: 10,
-          }}
-        >
-          <MaterialIcons name={result.section.icon as any} size={20} color={isDark ? '#fff' : '#1e3a5f'} />
-        </View>
-        <View className="flex-1">
-          <Text className="font-semibold text-sm" style={{ color: isDark ? '#f1f5f9' : '#0f172a' }} numberOfLines={1}>
-            {result.section.title}
-          </Text>
-          <Text className="text-xs" style={{ color: isDark ? '#64748b' : '#94a3b8' }}>
-            {result.section.titleEn}
-          </Text>
-        </View>
-        <MaterialIcons name="chevron-right" size={18} color={isDark ? '#475569' : '#cbd5e1'} />
-      </View>
+    <Animated.View style={{
+      flex: 1, opacity: op,
+      alignItems: 'center', justifyContent: 'center',
+      paddingHorizontal: 40,
+    }}>
+      <Animated.View style={{
+        transform: [{ scale: pulse }],
+        width: 72, height: 72, borderRadius: 20,
+        backgroundColor: 'rgba(8,21,143,0.06)',
+        alignItems: 'center', justifyContent: 'center',
+        marginBottom: 20,
+      }}>
+        <MaterialIcons name="bookmark-border" size={36} color="rgba(8,21,143,0.35)" />
+      </Animated.View>
 
-      {result.snippet ? (
-        <Text className="text-sm leading-5" style={{ color: isDark ? '#94a3b8' : '#475569' }} numberOfLines={3}>
-          {result.snippet}
-        </Text>
-      ) : null}
-    </TouchableOpacity>
-  );
-}
-
-const QUICK_CHIPS = [
-  'Тэтгэлэг', 'Кредит', 'Хичээл сонголт', 'Байр',
-  'Эрүүл мэнд', 'Виз', 'Дипломын хамгаалалт', 'Солилцооны хөтөлбөр',
-];
-
-function QuickAccess({ isDark, onChipPress }: { isDark: boolean; onChipPress: (q: string) => void }) {
-  return (
-    <View className="mt-2">
-      <Text className="text-xs font-semibold mb-3" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8' }}>
-        ХУРДАН ХАЙЛТ
+      <Text style={{
+        fontFamily: 'Inter_700Bold', fontSize: 17,
+        color: BLUE, marginBottom: 8, textAlign: 'center',
+      }}>
+        Хадгалсан зүйл байхгүй
       </Text>
-      <View className="flex-row flex-wrap gap-2">
-        {QUICK_CHIPS.map((chip) => (
-          <TouchableOpacity
-            key={chip}
-            onPress={() => onChipPress(chip)}
-            style={{ backgroundColor: isDark ? '#1e293b' : '#f1f5f9', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 }}
-          >
-            <Text className="text-sm" style={{ color: isDark ? '#94a3b8' : '#475569' }}>{chip}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
+      <Text style={{
+        fontFamily: 'Inter_400Regular', fontSize: 13,
+        color: MUTED, textAlign: 'center', lineHeight: 20, marginBottom: 28,
+      }}>
+        Бүлгийн дээр дарахад гарах{' '}
+        <Text style={{ color: BLUE, fontFamily: 'Inter_600SemiBold' }}>хавчуур</Text>
+        {' '}товчийг дарж хадгалаарай
+      </Text>
+
+      <TouchableOpacity
+        onPress={onBrowse}
+        style={{
+          backgroundColor: BLUE, borderRadius: 14,
+          paddingHorizontal: 28, paddingVertical: 13,
+        }}
+      >
+        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: WHITE }}>
+          Бүлгүүд үзэх
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
