@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { Redirect } from "expo-router";
 import { isOnboardingSeen } from "@/utils/storage";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   View,
   Text,
@@ -85,11 +86,10 @@ interface QuickLink {
 export default function HomeScreen() {
   const router = useRouter();
   const { toggle, isBookmarked } = useBookmarks();
+  const { token, loading: authLoading } = useAuth();
 
-  // Synchronous onboarding gate — no async, no blank screen
-  // DEV: always show onboarding. For prod: change `!isOnboardingSeen()` stays as-is,
-  // just make sure markOnboardingSeen() is called on completion.
   if (!isOnboardingSeen()) return <Redirect href="/onboarding" />;
+  if (!authLoading && !token) return <Redirect href="/login" />;
 
   const [quickLinks, setQuickLinks] = useState<QuickLink[]>([]);
   const [activeTab, setActiveTab] = useState("all");
@@ -576,7 +576,7 @@ export default function HomeScreen() {
                     letterSpacing: -0.2,
                   }}
                 >
-                  Сүүлийн баримтууд
+                  Баримт бичгүүд
                 </Text>
                 <TouchableOpacity
                   onPress={() => router.push("/(tabs)/explore" as any)}

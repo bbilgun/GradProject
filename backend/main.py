@@ -30,9 +30,15 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from rag_service import RAGService
+from database import Base, engine
+from auth import router as auth_router
+from news import router as news_router
+import state
 
 # ─────────────────────────────────────────────────────────────────
 # Config
@@ -60,6 +66,25 @@ _sync_running = False                # Human-readable status flag
 async def lifespan(app: FastAPI):
     global rag
 
+    # Create DB tables (no-op if they already exist)
+    Base.metadata.create_all(bind=engine)
+
+    # SQLite live migration — add columns introduced after initial deploy
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for col, ddl in [
+            ("cover_image_url", "ALTER TABLE news ADD COLUMN cover_image_url VARCHAR(1000)"),
+        ]:
+            try:
+                conn.execute(text(ddl))
+                conn.commit()
+                print(f"[DB] Migrated: added news.{col}")
+            except Exception:
+                pass  # column already exists
+
+    # Ensure uploads directory exists
+    os.makedirs(os.path.join(os.path.dirname(__file__), "static", "uploads"), exist_ok=True)
+
     handbook_abs = os.path.abspath(HANDBOOK_PATH)
 
     if os.path.exists(handbook_abs):
@@ -71,6 +96,8 @@ async def lifespan(app: FastAPI):
         print("[Startup] Initialising empty index — PDF sync will populate it.")
         rag = RAGService()
         rag.build_empty()
+
+    state.rag = rag  # Share with routers
 
     # Non-blocking background PDF sync — server accepts requests immediately
     asyncio.create_task(_run_background_sync())
@@ -135,6 +162,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router)
+app.include_router(news_router)
+
+# Serve admin panel at /admin
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=_STATIC_DIR, html=False), name="static")
+
+@app.get("/admin", include_in_schema=False)
+async def admin_panel():
+    return FileResponse(os.path.join(_STATIC_DIR, "admin.html"))
 
 
 # ─────────────────────────────────────────────────────────────────

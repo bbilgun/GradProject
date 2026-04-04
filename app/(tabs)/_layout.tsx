@@ -59,10 +59,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="news"
+        options={{
+          title: 'Мэдээ',
+          tabBarIcon: ({ color }) => <MaterialIcons name="campaign" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="explore"
         options={{
           title: 'Баримт',
           tabBarIcon: ({ color }) => <MaterialIcons name="folder-open" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Профайл',
+          tabBarIcon: ({ color }) => <MaterialIcons name="account-circle" size={24} color={color} />,
         }}
       />
     </Tabs>

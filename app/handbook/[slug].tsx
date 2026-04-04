@@ -156,7 +156,7 @@ export default function ContentDetailScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? Palette.dark.bg : Palette.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: Palette.primary }} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Header — Primary Blue */}
@@ -208,40 +208,42 @@ export default function ContentDetailScreen() {
       </View>
 
       {/* Content */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <Markdown style={markdownStyles}>{section.content}</Markdown>
-      </ScrollView>
-
-      {/* AI Summary button */}
-      <View style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        paddingHorizontal: 20, paddingBottom: 32, paddingTop: 14,
-        backgroundColor: isDark ? 'rgba(15,17,23,0.97)' : 'rgba(248,249,250,0.97)',
-        borderTopWidth: 1,
-        borderTopColor: isDark ? Palette.dark.divider : Palette.divider,
-      }}>
-        <TouchableOpacity
-          onPress={handleSummarizeWithAI}
-          activeOpacity={0.88}
-          style={{
-            borderRadius: 14,
-            paddingVertical: 15,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            backgroundColor: Palette.primary,
-          }}
+      <View style={{ flex: 1, backgroundColor: isDark ? Palette.dark.bg : Palette.bg }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
         >
-          <MaterialIcons name="auto-awesome" size={18} color="#fff" />
-          <Text style={{ color: '#fff', fontFamily: 'Inter_700Bold', fontSize: 15, letterSpacing: 0.2 }}>
-            AI-аар хураангуйлах
-          </Text>
-        </TouchableOpacity>
+          <Markdown style={markdownStyles}>{section.content}</Markdown>
+        </ScrollView>
+
+        {/* AI Summary button */}
+        <View style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          paddingHorizontal: 20, paddingBottom: 32, paddingTop: 14,
+          backgroundColor: isDark ? 'rgba(15,17,23,0.97)' : 'rgba(248,249,250,0.97)',
+          borderTopWidth: 1,
+          borderTopColor: isDark ? Palette.dark.divider : Palette.divider,
+        }}>
+          <TouchableOpacity
+            onPress={handleSummarizeWithAI}
+            activeOpacity={0.88}
+            style={{
+              borderRadius: 14,
+              paddingVertical: 15,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              backgroundColor: Palette.primary,
+            }}
+          >
+            <MaterialIcons name="auto-awesome" size={18} color="#fff" />
+            <Text style={{ color: '#fff', fontFamily: 'Inter_700Bold', fontSize: 15, letterSpacing: 0.2 }}>
+              AI-аар хураангуйлах
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
