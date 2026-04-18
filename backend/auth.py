@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
-from schemas import LoginRequest, Token, TokenData, UserCreate, UserResponse
+from schemas import LoginRequest, Token, TokenData, TokenWithUser, UserCreate, UserResponse
 
 # ── Config ────────────────────────────────────────────────────────
 
@@ -29,9 +29,45 @@ SECRET_KEY: str = os.getenv("SECRET_KEY", "change-me-in-production-use-openssl-r
 ALGORITHM: str = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
+# ──────────────────────────────────────────────────────────────────
+# TODO: Refresh Token support
+#
+# Today the client only receives a short-lived Access Token (60 min by
+# default). When it expires, the next protected request returns 401 and
+# the user is forced back to the login screen — a bad UX, especially on
+# mobile where the app is backgrounded often.
+#
+# The fix is a two-token flow:
+#   • Access Token  — short-lived (15–60 min), sent with every request.
+#   • Refresh Token — long-lived (7–30 days), stored in SecureStore on
+#     the client, used ONLY to hit a new /auth/refresh endpoint that
+#     mints a fresh access token.
+#
+# Why this matters:
+#   1. Users stay logged in for weeks without re-entering credentials.
+#   2. Access tokens can stay short-lived, limiting the blast radius if
+#      one is ever leaked (shorter window of validity).
+#   3. Refresh tokens can be revoked server-side (store a jti/token_id
+#      in the DB) — enabling "log out of all devices" and instant
+#      invalidation on password change, unlike stateless JWTs alone.
+#   4. Rotating refresh tokens on every /auth/refresh call lets us
+#      detect token theft: if an old refresh token is reused after
+#      rotation, we know it's been stolen and can revoke the whole
+#      family.
+#
+# Minimum future work:
+#   - Add a `refresh_tokens` table (id, user_id, token_hash, expires_at,
+#     revoked_at, replaced_by_id) for rotation + revocation.
+#   - Return both tokens from /auth/login.
+#   - Add POST /auth/refresh that validates the refresh token, rotates
+#     it, and returns a new access token.
+#   - Client: on any 401, call /auth/refresh once before giving up and
+#     sending the user to /login.
+# ──────────────────────────────────────────────────────────────────
+
 # ── Security helpers ──────────────────────────────────────────────
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=10)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
@@ -96,6 +132,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
         email=payload.email,
         hashed_password=hash_password(payload.password),
         full_name=payload.full_name,
+        branch=payload.branch,
+        department=payload.department,
         major=payload.major,
         gpa=payload.gpa,
         total_credits=payload.total_credits,
@@ -107,9 +145,9 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     return _to_response(user)
 
 
-@router.post("/auth/login", response_model=Token)
+@router.post("/auth/login", response_model=TokenWithUser)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    """Authenticate and return a JWT access token."""
+    """Authenticate and return a JWT access token plus the user profile."""
     user = db.query(User).filter(User.student_id == payload.student_id).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
@@ -118,7 +156,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = create_access_token({"sub": user.student_id})
-    return Token(access_token=access_token)
+    return TokenWithUser(access_token=access_token, user=_to_response(user))
 
 
 # OAuth2PasswordRequestForm variant — lets Swagger UI's "Authorize" button work
@@ -153,6 +191,8 @@ def _to_response(user: User) -> UserResponse:
         student_id=user.student_id,
         email=user.email,
         full_name=user.full_name,
+        branch=user.branch,
+        department=user.department,
         major=user.major,
         gpa=user.gpa,
         total_credits=user.total_credits,

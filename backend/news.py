@@ -45,6 +45,7 @@ def _to_response(news: News) -> NewsResponse:
         id=news.id,
         title=news.title,
         cover_image_url=news.cover_image_url,
+        is_special=news.is_special or False,
         content=news.content,
         sections=[
             NewsSectionResponse(
@@ -98,6 +99,7 @@ def create_news(
     news = News(
         title=payload.title,
         cover_image_url=payload.cover_image_url,
+        is_special=payload.is_special,
         content=payload.content or "",   # legacy NOT NULL column
         author_id=current_user.id,
     )
@@ -153,3 +155,16 @@ def get_news_detail(news_id: int, db: Session = Depends(get_db)):
     if not news:
         raise HTTPException(status_code=404, detail="News not found.")
     return _to_response(news)
+
+
+@router.delete("/admin/news/{news_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_news(
+    news_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_council),
+):
+    news = db.query(News).filter(News.id == news_id).first()
+    if not news:
+        raise HTTPException(status_code=404, detail="News not found.")
+    db.delete(news)
+    db.commit()

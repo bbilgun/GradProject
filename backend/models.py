@@ -6,7 +6,7 @@ from __future__ import annotations
 import enum
 import re
 
-from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 
@@ -30,7 +30,9 @@ class User(Base):
     hashed_password: str = Column(String(255), nullable=False)
 
     full_name: str = Column(String(255), nullable=True)
-    major: str = Column(String(255), nullable=True)
+    branch: str = Column(String(255), nullable=True)       # Салбар сургууль
+    department: str = Column(String(255), nullable=True)   # Салбар/Тэнхим
+    major: str = Column(String(255), nullable=True)        # Хөтөлбөр/Анги
     gpa: float = Column(Float, nullable=True)
     total_credits: int = Column(Integer, nullable=True)
 
@@ -74,6 +76,7 @@ class News(Base):
     title: str = Column(String(500), nullable=False)
     content: str = Column(Text, nullable=True)          # legacy plain-text fallback
     cover_image_url: str = Column(String(1000), nullable=True)
+    is_special: bool = Column(Boolean, default=False, nullable=False)
     author_id: int = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

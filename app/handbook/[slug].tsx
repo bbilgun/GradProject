@@ -159,53 +159,33 @@ export default function ContentDetailScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: Palette.primary }} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Header — Primary Blue */}
-      <View style={{ backgroundColor: Palette.primary, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 22 }}>
+      {/* ── Back header ─────────────────────────────────── */}
+      <View style={{ backgroundColor: Palette.primary, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 20 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <TouchableOpacity
             onPress={() => router.back()}
-            style={{ flexDirection: 'row', alignItems: 'center' }}
+            style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}
           >
-            <MaterialIcons name="arrow-back" size={22} color="#fff" />
-            <Text style={{ marginLeft: 8, fontFamily: 'Inter_500Medium', fontSize: 14, color: '#fff' }}>
-              Буцах
-            </Text>
+            <MaterialIcons name="arrow-back" size={18} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => toggle(slug ?? '')}
-            style={{
-              width: 36, height: 36, borderRadius: 10,
-              backgroundColor: 'rgba(255,255,255,0.15)',
-              alignItems: 'center', justifyContent: 'center',
-            }}
+            style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}
           >
-            <MaterialIcons
-              name={isBookmarked(slug ?? '') ? 'bookmark' : 'bookmark-border'}
-              size={20}
-              color="#fff"
-            />
+            <MaterialIcons name={isBookmarked(slug ?? '') ? 'bookmark' : 'bookmark-border'} size={18} color="#fff" />
           </TouchableOpacity>
         </View>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{
-            width: 44, height: 44, borderRadius: 12,
-            backgroundColor: 'rgba(255,255,255,0.18)',
-            alignItems: 'center', justifyContent: 'center',
-            marginRight: 12,
-          }}>
-            <MaterialIcons name={section.icon as any} size={24} color="#fff" />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
+            <MaterialIcons name={section.icon as any} size={18} color="#fff" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 20, letterSpacing: -0.4, color: '#fff', lineHeight: 26 }}>
-              {section.title}
-            </Text>
-            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: 'rgba(255,255,255,0.65)', marginTop: 2 }}>
-              {section.titleEn}
-            </Text>
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 19, letterSpacing: -0.2, color: '#fff' }}>{section.title}</Text>
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>{section.titleEn}</Text>
           </View>
         </View>
       </View>
+      <View style={{ height: 24, backgroundColor: isDark ? '#0F1117' : '#F8F9FA', borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -1 }} />
 
       {/* Content */}
       <View style={{ flex: 1, backgroundColor: isDark ? Palette.dark.bg : Palette.bg }}>

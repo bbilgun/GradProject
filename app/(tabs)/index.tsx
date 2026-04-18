@@ -1,1241 +1,702 @@
-import React, { useRef, useEffect, useState, useMemo } from "react";
-import { Redirect } from "expo-router";
-import { isOnboardingSeen } from "@/utils/storage";
-import { useAuth } from "@/contexts/AuthContext";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  Image,
-  ScrollView,
-  TouchableOpacity,
   Animated,
+  Dimensions,
   Easing,
-  StatusBar,
-  TextInput,
-  ActivityIndicator,
-  Keyboard,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import * as WebBrowser from "expo-web-browser";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { LinearGradient } from "expo-linear-gradient";
+import { Redirect, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
-import HandbookService from "@/services/handbook_service";
+import { useAuth } from "@/contexts/AuthContext";
 import { useBookmarks } from "@/contexts/BookmarkContext";
-import { EaseOutExpo, Space } from "@/constants/Theme";
+import { isOnboardingSeen } from "@/utils/storage";
+import HandbookService from "@/services/handbook_service";
 import { Config } from "@/constants/config";
 import type { HandbookSection } from "@/services/handbook_service";
 
-// ─── RAG search result type ───────────────────────────────────────
-
-interface SearchResult {
-  section: HandbookSection;
-  snippet: string;
-}
-
 // ─── Design tokens ────────────────────────────────────────────────
 
-const BLUE = "#08158F";
-const GOLD = "#FFC20D";
-const BG = "#F8F9FA";
-const WHITE = "#FFFFFF";
-const BODY = "#1A1A2E";
-const MUTED = "#6B7280";
-const BORDER = "rgba(8,21,143,0.09)";
+const BLUE   = "#08158F";
+const BLUE2  = "#0A1DB8";
+const BLUE3  = "#1833D6";
+const GOLD   = "#FFC20D";
+const BG     = "#F0F2F8";
+const WHITE  = "#FFFFFF";
+const BODY   = "#1A1A2E";
+const MUTED  = "#6B7280";
 
-const EASE = Easing.bezier(...EaseOutExpo);
+const { width: SW } = Dimensions.get("window");
+const EASE = Easing.bezier(0.25, 0.1, 0.25, 1);
 
-// ─── Category mapping ─────────────────────────────────────────────
+const DEFAULT_COVER = require("@/assets/images/news_main.jpg");
 
-const CATEGORY_MAP: Record<string, string> = {
-  introduction: "general",
-  "student-life": "general",
-  schools: "schools",
-  "core-curriculum": "schools",
-  "credit-system": "schools",
-  admission: "schools",
-  "digital-learning": "schools",
-  graduation: "schools",
-  "exchange-programs": "schools",
-  scholarships: "rules",
-  dormitory: "other",
-  "health-services": "other",
-  research: "other",
-  "international-students": "other",
-};
-
-const TABS = [
-  { id: "all", label: "Бүгд" },
-  { id: "general", label: "Ерөнхий" },
-  { id: "schools", label: "Сургууль" },
-  { id: "rules", label: "Дүрэм журам" },
-  { id: "other", label: "Бусад" },
-];
-
-const ALL_SECTIONS = HandbookService.getAllSections();
-
-interface QuickLink {
-  id: string;
+interface NewsItem {
+  id: number;
   title: string;
-  url: string;
-  category: string;
+  cover_image_url: string | null;
+  created_at: string;
 }
 
-// ─── Screen ───────────────────────────────────────────────────────
+function toUtc(iso: string) {
+  return new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
+}
+
+function timeAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - toUtc(iso).getTime()) / 1000);
+  if (diff < 60)    return "Яг одоо";
+  if (diff < 3600)  return `${Math.floor(diff / 60)}м өмнө`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}ц өмнө`;
+  return toUtc(iso).toLocaleDateString("mn-MN", { month: "short", day: "numeric" });
+}
+
+function coverUri(item: NewsItem) {
+  if (!item.cover_image_url) return DEFAULT_COVER;
+  return {
+    uri: item.cover_image_url.startsWith("http")
+      ? item.cover_image_url
+      : `${Config.API_BASE}${item.cover_image_url}`,
+  };
+}
+
+// ─── Screen ────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { toggle, isBookmarked } = useBookmarks();
-  const { token, loading: authLoading } = useAuth();
+  const { user, token, loading: authLoading } = useAuth();
+  const { bookmarks, isBookmarked, savedNews } = useBookmarks();
+
+  const [news, setNews]             = useState<NewsItem[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const heroOp = useRef(new Animated.Value(0)).current;
+  const heroY  = useRef(new Animated.Value(-18)).current;
+  const bodyOp = useRef(new Animated.Value(0)).current;
+  const bodyY  = useRef(new Animated.Value(24)).current;
+
+  const fetchNews = useCallback(async () => {
+    try {
+      const r = await fetch(Config.NEWS);
+      const d: NewsItem[] = await r.json();
+      setNews(d.slice(0, 5));
+    } catch {}
+    setRefreshing(false);
+  }, []);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(heroOp, { toValue: 1, duration: 450, easing: EASE, useNativeDriver: true }),
+      Animated.timing(heroY,  { toValue: 0, duration: 450, easing: EASE, useNativeDriver: true }),
+      Animated.timing(bodyOp, { toValue: 1, duration: 520, delay: 140, easing: EASE, useNativeDriver: true }),
+      Animated.timing(bodyY,  { toValue: 0, duration: 520, delay: 140, easing: EASE, useNativeDriver: true }),
+    ]).start();
+    fetchNews();
+  }, []);
 
   if (!isOnboardingSeen()) return <Redirect href="/onboarding" />;
   if (!authLoading && !token) return <Redirect href="/login" />;
 
-  const [quickLinks, setQuickLinks] = useState<QuickLink[]>([]);
-  const [activeTab, setActiveTab] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchFocused, setFocused] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(
-    null,
-  );
-  const [searching, setSearching] = useState(false);
+  const firstName = user?.full_name?.split(" ")[0] ?? "Оюутан";
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Өглөөний мэнд" : hour < 17 ? "Өдрийн мэнд" : "Оройн мэнд";
 
-  const doSearch = async (q: string) => {
-    if (!q.trim()) return;
-    Keyboard.dismiss();
-    setSearching(true);
-    setSearchResults([]);
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch(Config.SEARCH_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q, top_k: 8 }),
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timer));
-      const data = await res.json();
-      const mapped: SearchResult[] = (data.results ?? []).map((r: any) => {
-        const section = HandbookService.getSectionBySlug(r.section_id) ?? {
-          id: r.section_id,
-          title: r.section_title ?? r.section_id,
-          titleEn: "",
-          description: "",
-          icon: "article",
-          color: "#EFF6FF",
-          darkColor: "#1E3A5F",
-          content: "",
-        };
-        return { section, snippet: r.text ?? "" };
-      });
-      setSearchResults(mapped);
-    } catch {
-      const offline = HandbookService.searchLocal(q);
-      setSearchResults(
-        offline.map((s) => ({ section: s, snippet: s.description })),
-      );
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const clearSearch = () => {
-    setSearchQuery("");
-    setSearchResults(null);
-  };
-
-  // Fetch recent documents
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
-    fetch(Config.RESOURCES_RECENT_ENDPOINT, { signal: controller.signal })
-      .then((r) => r.json())
-      .then((d) => setQuickLinks(d.items ?? []))
-      .catch(() => {})
-      .finally(() => clearTimeout(timer));
-  }, []);
-
-  // ── Filtered sections ──────────────────────────────────────────
-  const filteredSections = useMemo(() => {
-    let list = ALL_SECTIONS;
-    if (activeTab !== "all") {
-      list = list.filter((s) => CATEGORY_MAP[s.id] === activeTab);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (s) =>
-          s.title.toLowerCase().includes(q) ||
-          s.description.toLowerCase().includes(q),
-      );
-    }
-    return list;
-  }, [activeTab, searchQuery]);
-
-  // Build rows of 2 for the grid
-  const rows = useMemo(() => {
-    const r: HandbookSection[][] = [];
-    for (let i = 0; i < filteredSections.length; i += 2) {
-      r.push(filteredSections.slice(i, i + 2));
-    }
-    return r;
-  }, [filteredSections]);
-
-  // Header entrance animation
-  const headerOp = useRef(new Animated.Value(0)).current;
-  const headerY = useRef(new Animated.Value(-10)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(headerOp, {
-        toValue: 1,
-        duration: 380,
-        easing: EASE,
-        useNativeDriver: true,
-      }),
-      Animated.timing(headerY, {
-        toValue: 0,
-        duration: 380,
-        easing: EASE,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-
-  const goToChapter = (section: HandbookSection) =>
-    router.push({
-      pathname: "/handbook/[slug]" as any,
-      params: { slug: section.id },
-    });
-
-  const activeCategoryLabel =
-    TABS.find((t) => t.id === activeTab)?.label ?? "Бүгд";
+  const bookmarkedSections = HandbookService.getAllSections()
+    .filter((s) => isBookmarked(s.id))
+    .slice(0, 6);
+  const featuredSections = HandbookService.getAllSections().slice(0, 6);
+  const totalSaved = bookmarkedSections.length + savedNews.size;
 
   return (
-    <View style={{ flex: 1, backgroundColor: BG }}>
-      <StatusBar barStyle="light-content" backgroundColor={BLUE} />
+    <View style={s.root}>
+      <StatusBar style="light" />
 
-      {/* ── Blue header ─────────────────────────────────────── */}
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: BLUE }}>
-        <Animated.View
-          style={{
-            opacity: headerOp,
-            transform: [{ translateY: headerY }],
-            paddingHorizontal: 20,
-            paddingTop: 10,
-            paddingBottom: 24,
-          }}
-        >
-          {/* Top row: logo + AI button */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 16,
-            }}
-          >
+      {/* ── Hero header ──────────────────────────────────────────── */}
+      <LinearGradient
+        colors={[BLUE, BLUE2, BLUE3]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={s.heroBg}
+      >
+        <View style={s.orbGold} />
+        <View style={s.orbBlue} />
+        <View style={s.orbTiny} />
+        <SafeAreaView edges={["top"]}>
+        <Animated.View style={[s.hero, { opacity: heroOp, transform: [{ translateY: heroY }] }]}>
+          {/* Top row */}
+          <View style={s.heroTopRow}>
             <Image
-              source={require("@/assets/images/main_logo.png")}
-              style={{ width: 36, height: 36, borderRadius: 8 }}
+              source={require("@/assets/images/main_header.png")}
+              style={s.logo}
               resizeMode="contain"
             />
-            <TouchableOpacity
-              onPress={() => router.push("/(tabs)/ai-assistant" as any)}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: "rgba(255,255,255,0.13)",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <MaterialIcons name="auto-awesome" size={19} color={GOLD} />
-            </TouchableOpacity>
+            <View style={s.heroActions}>
+              <TouchableOpacity
+                onPress={() => router.push("/(tabs)/search" as any)}
+                style={s.heroIconBtn}
+                accessibilityLabel="Хадгалсан"
+              >
+                <MaterialIcons name="bookmark" size={19} color={WHITE} />
+                {totalSaved > 0 && (
+                  <View style={s.heroBadge}>
+                    <Text style={s.heroBadgeText}>{totalSaved > 9 ? "9+" : totalSaved}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push("/(tabs)/profile" as any)}
+                style={s.heroAvatarBtn}
+              >
+                <Text style={s.heroAvatarText}>
+                  {(user?.full_name ?? "U").split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <Text
-            style={{
-              fontFamily: "Inter_700Bold",
-              fontSize: 26,
-              color: WHITE,
-              letterSpacing: -0.5,
-              marginBottom: 4,
-            }}
-          >
-            ШУТИС Гарын Авлага
-          </Text>
-          <Text
-            style={{
-              fontFamily: "Inter_400Regular",
-              fontSize: 12,
-              color: "rgba(255,255,255,0.60)",
-            }}
-          >
-            Оюутны бүх мэдээлэл нэг дороос
-          </Text>
-        </Animated.View>
-        {/* Rounded bottom edge */}
-        <View
-          style={{
-            height: 22,
-            backgroundColor: BG,
-            borderTopLeftRadius: 22,
-            borderTopRightRadius: 22,
-            marginTop: -1,
-          }}
-        />
-      </SafeAreaView>
 
-      {/* ── Sticky search + category bar ────────────────────── */}
-      <View
-        style={{
-          backgroundColor: WHITE,
-
-          zIndex: 10,
-        }}
-      >
-        {/* Search input */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginHorizontal: Space.gutter,
-            marginTop: 12,
-            marginBottom: 10,
-            backgroundColor: BG,
-            borderRadius: 14,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-            borderWidth: 1.5,
-            borderColor: searchFocused ? BLUE : "transparent",
-          }}
-        >
-          <MaterialIcons
-            name="search"
-            size={18}
-            color={searchFocused ? BLUE : MUTED}
-          />
-          <TextInput
-            placeholder="Хайлт хийх..."
-            placeholderTextColor={MUTED}
-            value={searchQuery}
-            onChangeText={(text) => {
-              setSearchQuery(text);
-              if (!text) setSearchResults(null);
-            }}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            returnKeyType="search"
-            onSubmitEditing={() => doSearch(searchQuery)}
-            style={{
-              flex: 1,
-              marginLeft: 10,
-              paddingVertical: 0,
-              fontFamily: "Inter_400Regular",
-              fontSize: 14,
-              color: BODY,
-            }}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={clearSearch}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <MaterialIcons name="close" size={17} color={MUTED} />
-            </TouchableOpacity>
+          {/* Greeting */}
+          <Text style={s.greetingLabel}>{greeting},</Text>
+          <Text style={s.greetingName}>{firstName}</Text>
+          {user?.student_id && (
+            <View style={s.idRow}>
+              <View style={s.idPill}>
+                <MaterialIcons name="badge" size={12} color={GOLD} />
+                <Text style={s.idText}>{user.student_id}</Text>
+              </View>
+              {user.department && (
+                <Text style={s.deptText} numberOfLines={1}>{user.department}</Text>
+              )}
+            </View>
           )}
-        </View>
+        </Animated.View>
+        </SafeAreaView>
+        <View style={s.heroCurve} />
+      </LinearGradient>
 
-        {/* Category chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingHorizontal: Space.gutter,
-            paddingBottom: 12,
-            gap: 8,
-          }}
-        >
-          {TABS.map((tab) => (
-            <CategoryChip
-              key={tab.id}
-              tab={tab}
-              isActive={activeTab === tab.id}
-              onPress={setActiveTab}
+      {/* ── Scrollable body ──────────────────────────────────────── */}
+      <Animated.ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={s.body}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); fetchNews(); }}
+            tintColor={BLUE}
+            colors={[BLUE]}
+          />
+        }
+      >
+        <Animated.View style={{ opacity: bodyOp, transform: [{ translateY: bodyY }] }}>
+
+          {/* ── Quick actions ───────────────────────────────────── */}
+          <View style={s.quickGrid}>
+            <QuickAction
+              icon="auto-awesome"
+              label="AI Туслах"
+              gradient={["#7C3AED", "#9F67FF"]}
+              onPress={() => router.push("/(tabs)/ai-assistant" as any)}
             />
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* ── Search results view ──────────────────────────────── */}
-      {searchResults !== null && (
-        <View style={{ flex: 1 }}>
-          {/* Results header */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: Space.gutter,
-              paddingVertical: 12,
-              backgroundColor: WHITE,
-              borderBottomWidth: 1,
-              borderBottomColor: BORDER,
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: "Inter_600SemiBold",
-                fontSize: 13,
-                color: MUTED,
-                flex: 1,
-              }}
-            >
-              {searching
-                ? "Хайж байна..."
-                : `${searchResults.length} үр дүн — "${searchQuery}"`}
-            </Text>
-            <TouchableOpacity
-              onPress={clearSearch}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text
-                style={{
-                  fontFamily: "Inter_600SemiBold",
-                  fontSize: 13,
-                  color: BLUE,
-                }}
-              >
-                Буцах
-              </Text>
-            </TouchableOpacity>
+            <QuickAction
+              icon="menu-book"
+              label="Гарын авлага"
+              gradient={[BLUE, BLUE2]}
+              onPress={() => router.push("/(tabs)/explore" as any)}
+            />
+            <QuickAction
+              icon="campaign"
+              label="Мэдээ"
+              gradient={["#059669", "#34D399"]}
+              onPress={() => router.push("/(tabs)/news" as any)}
+            />
+            <QuickAction
+              icon="bookmark"
+              label="Хадгалсан"
+              gradient={["#D97706", "#FBBF24"]}
+              onPress={() => router.push("/(tabs)/search" as any)}
+            />
           </View>
 
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{
-              padding: Space.gutter,
-              paddingBottom: 110,
-            }}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {searching && [1, 2, 3, 4].map((i) => <SearchSkeleton key={i} />)}
+          {/* ── Student stats strip ────────────────────────────── */}
+          {user && <StatsStrip user={user} onPress={() => router.push("/(tabs)/profile" as any)} />}
 
-            {!searching && searchResults.length === 0 && (
-              <View style={{ alignItems: "center", paddingVertical: 48 }}>
-                <MaterialIcons
-                  name="search-off"
-                  size={42}
-                  color={MUTED}
-                  style={{ marginBottom: 12 }}
-                />
-                <Text
-                  style={{
-                    fontFamily: "Inter_400Regular",
-                    fontSize: 14,
-                    color: MUTED,
-                  }}
-                >
-                  Үр дүн олдсонгүй
-                </Text>
-              </View>
-            )}
-
-            {!searching &&
-              searchResults.map((r, idx) => (
-                <SearchResultCard
-                  key={`${r.section.id}-${idx}`}
-                  result={r}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/handbook/[slug]" as any,
-                      params: { slug: r.section.id },
-                    })
-                  }
-                />
-              ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* ── Normal scrollable content ────────────────────────── */}
-      {searchResults === null && (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: Space.gutter, paddingBottom: 110 }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* AI Assistant banner */}
-          <TouchableOpacity
-            onPress={() => router.push("/(tabs)/ai-assistant" as any)}
-            activeOpacity={0.88}
-            style={{
-              backgroundColor: WHITE,
-              borderRadius: 16,
-              padding: 14,
-              flexDirection: "row",
-              alignItems: "center",
-              borderWidth: 1.5,
-              borderColor: GOLD,
-              marginBottom: 20,
-              shadowColor: "rgba(255,194,13,0.25)",
-              shadowOffset: { width: 0, height: 3 },
-              shadowOpacity: 1,
-              shadowRadius: 12,
-              elevation: 4,
-            }}
-          >
-            <View
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 12,
-                backgroundColor: "rgba(255,194,13,0.10)",
-                borderWidth: 1,
-                borderColor: "rgba(255,194,13,0.25)",
-                alignItems: "center",
-                justifyContent: "center",
-                marginRight: 12,
-              }}
-            >
-              <MaterialIcons name="auto-awesome" size={22} color={GOLD} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginBottom: 3,
-                }}
-              >
-                <Text
-                  style={{
-                    fontFamily: "Inter_700Bold",
-                    fontSize: 14,
-                    color: BLUE,
-                  }}
-                >
-                  AI Туслах
-                </Text>
-                <View
-                  style={{
-                    marginLeft: 7,
-                    backgroundColor: GOLD,
-                    borderRadius: 5,
-                    paddingHorizontal: 6,
-                    paddingVertical: 1,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: "Inter_700Bold",
-                      fontSize: 9,
-                      color: BODY,
-                      letterSpacing: 0.5,
-                    }}
-                  >
-                    BETA
-                  </Text>
-                </View>
-              </View>
-              <Text
-                style={{
-                  fontFamily: "Inter_400Regular",
-                  fontSize: 12,
-                  color: MUTED,
-                }}
-              >
-                Гарын авлагаас AI-аар хайлт хийх, тайлбар авах
-              </Text>
-            </View>
-            <MaterialIcons
-              name="chevron-right"
-              size={22}
-              color="rgba(8,21,143,0.25)"
-            />
-          </TouchableOpacity>
-
-          {/* Recent documents strip */}
-          {quickLinks.length > 0 && (
-            <View style={{ marginBottom: 22 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 12,
-                }}
-              >
-                <Text
-                  style={{
-                    fontFamily: "Inter_700Bold",
-                    fontSize: 15,
-                    color: BLUE,
-                    letterSpacing: -0.2,
-                  }}
-                >
-                  Баримт бичгүүд
-                </Text>
-                <TouchableOpacity
-                  onPress={() => router.push("/(tabs)/explore" as any)}
-                >
-                  <Text
-                    style={{
-                      fontFamily: "Inter_500Medium",
-                      fontSize: 13,
-                      color: GOLD,
-                    }}
-                  >
-                    Бүгдийг харах →
-                  </Text>
-                </TouchableOpacity>
-              </View>
+          {/* ── Recent news ─────────────────────────────────────── */}
+          {news.length > 0 && (
+            <>
+              <SectionHeader
+                title="Сүүлийн мэдээ"
+                action={{ label: "Бүгд", onPress: () => router.push("/(tabs)/news" as any) }}
+              />
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 12 }}
+                contentContainerStyle={s.hScrollContent}
+                style={s.hScroll}
               >
-                {quickLinks.map((item, idx) => (
-                  <RecentDocCard key={item.id} item={item} isNew={idx < 2} />
+                {news.map((item, i) => (
+                  <NewsCard
+                    key={item.id}
+                    item={item}
+                    index={i}
+                    onPress={() => router.push(`/news/${item.id}` as any)}
+                  />
                 ))}
               </ScrollView>
-            </View>
+            </>
           )}
 
-          {/* Section label */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "baseline",
-              marginBottom: 14,
+          {/* ── Bookmarks / featured chapters ──────────────────── */}
+          <SectionHeader
+            title={bookmarkedSections.length > 0 ? "Хадгалсан бүлгүүд" : "Онцлох бүлгүүд"}
+            action={{
+              label: "Бүгд",
+              onPress: () => router.push(
+                bookmarkedSections.length > 0 ? ("/(tabs)/search" as any) : ("/(tabs)/explore" as any)
+              ),
             }}
+          />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.hScrollContent}
+            style={s.hScroll}
           >
-            <Text
-              style={{
-                fontFamily: "Inter_700Bold",
-                fontSize: 15,
-                color: BLUE,
-                letterSpacing: -0.2,
-              }}
-            >
-              {activeCategoryLabel}
-            </Text>
-            <Text
-              style={{
-                fontFamily: "Inter_400Regular",
-                fontSize: 12,
-                color: MUTED,
-                marginLeft: 6,
-              }}
-            >
-              ({filteredSections.length} бүлэг)
-            </Text>
-          </View>
-
-          {/* Empty state */}
-          {filteredSections.length === 0 && (
-            <View style={{ alignItems: "center", paddingVertical: 48 }}>
-              <MaterialIcons
-                name="search-off"
-                size={42}
-                color={MUTED}
-                style={{ marginBottom: 12 }}
+            {(bookmarkedSections.length > 0 ? bookmarkedSections : featuredSections).map((section, i) => (
+              <ChapterCard
+                key={section.id}
+                section={section}
+                index={i}
+                onPress={() => router.push({ pathname: "/handbook/[slug]" as any, params: { slug: section.id } })}
               />
-              <Text
-                style={{
-                  fontFamily: "Inter_400Regular",
-                  fontSize: 14,
-                  color: MUTED,
-                  textAlign: "center",
-                }}
-              >
-                Хайлтын үр дүн олдсонгүй
-              </Text>
-            </View>
-          )}
+            ))}
+          </ScrollView>
 
-          {/* 2-column grid with staggered entry */}
-          {rows.map((row, rowIdx) => (
-            <View
-              key={`${activeTab}-${searchQuery}-row-${rowIdx}`}
-              style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}
-            >
-              {row[0] && (
-                <StaggerCard delay={rowIdx * 55}>
-                  <ChapterCard
-                    section={row[0]}
-                    onPress={goToChapter}
-                    bookmarked={isBookmarked(row[0].id)}
-                    onBookmark={() => toggle(row[0].id)}
-                  />
-                </StaggerCard>
-              )}
-              {row[1] ? (
-                <StaggerCard delay={rowIdx * 55 + 40}>
-                  <ChapterCard
-                    section={row[1]}
-                    onPress={goToChapter}
-                    bookmarked={isBookmarked(row[1].id)}
-                    onBookmark={() => toggle(row[1].id)}
-                  />
-                </StaggerCard>
-              ) : (
-                <View style={{ flex: 1 }} />
-              )}
-            </View>
-          ))}
-        </ScrollView>
+          {/* ── AI Banner ───────────────────────────────────────── */}
+          <AIBanner onPress={() => router.push("/(tabs)/ai-assistant" as any)} />
+
+        </Animated.View>
+      </Animated.ScrollView>
+    </View>
+  );
+}
+
+// ─── Section header ────────────────────────────────────────────────
+
+function SectionHeader({ title, action }: { title: string; action?: { label: string; onPress: () => void } }) {
+  return (
+    <View style={s.sectionHeader}>
+      <Text style={s.sectionTitle}>{title}</Text>
+      {action && (
+        <TouchableOpacity onPress={action.onPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.sectionActionBtn}>
+          <Text style={s.sectionAction}>{action.label}</Text>
+          <MaterialIcons name="arrow-forward" size={13} color={BLUE} />
+        </TouchableOpacity>
       )}
     </View>
   );
 }
 
-// ─── Stagger Card wrapper ─────────────────────────────────────────
+// ─── Quick action tile ─────────────────────────────────────────────
 
-function StaggerCard({
-  delay,
-  children,
-}: {
-  delay: number;
-  children: React.ReactNode;
-}) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(20)).current;
-
-  useEffect(() => {
-    opacity.setValue(0);
-    translateY.setValue(20);
-    Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 280,
-        delay,
-        easing: EASE,
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 280,
-        delay,
-        easing: EASE,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [delay]);
-
-  return (
-    <Animated.View style={{ flex: 1, opacity, transform: [{ translateY }] }}>
-      {children}
-    </Animated.View>
-  );
-}
-
-// ─── Category Chip ────────────────────────────────────────────────
-
-function CategoryChip({
-  tab,
-  isActive,
-  onPress,
-}: {
-  tab: { id: string; label: string };
-  isActive: boolean;
-  onPress: (id: string) => void;
+function QuickAction({ icon, label, gradient, onPress }: {
+  icon: string; label: string; gradient: [string, string]; onPress: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
-
-  const pressIn = () =>
-    Animated.timing(scale, {
-      toValue: 0.9,
-      duration: 110,
-      easing: EASE,
-      useNativeDriver: true,
-    }).start();
-  const pressOut = () =>
-    Animated.timing(scale, {
-      toValue: 1,
-      duration: 160,
-      easing: EASE,
-      useNativeDriver: true,
-    }).start();
-
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <TouchableOpacity
-        activeOpacity={1}
-        onPressIn={pressIn}
-        onPressOut={pressOut}
-        onPress={() => onPress(tab.id)}
-        style={{
-          paddingHorizontal: 16,
-          paddingVertical: 8,
-          borderRadius: 999,
-          backgroundColor: isActive ? BLUE : WHITE,
-          borderWidth: 1,
-          borderColor: isActive ? BLUE : BORDER,
-        }}
-      >
-        <Text
-          style={{
-            fontFamily: isActive ? "Inter_600SemiBold" : "Inter_400Regular",
-            fontSize: 13,
-            color: isActive ? WHITE : MUTED,
-            letterSpacing: 0.1,
-          }}
-        >
-          {tab.label}
-        </Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
-
-// ─── Chapter Card ─────────────────────────────────────────────────
-
-function ChapterCard({
-  section,
-  onPress,
-  bookmarked,
-  onBookmark,
-}: {
-  section: HandbookSection;
-  onPress: (s: HandbookSection) => void;
-  bookmarked: boolean;
-  onBookmark: () => void;
-}) {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const pressIn = () =>
-    Animated.timing(scale, {
-      toValue: 0.96,
-      duration: 100,
-      easing: EASE,
-      useNativeDriver: true,
-    }).start();
-  const pressOut = () =>
-    Animated.timing(scale, {
-      toValue: 1,
-      duration: 180,
-      easing: EASE,
-      useNativeDriver: true,
-    }).start();
-
-  return (
-    <Animated.View style={{ transform: [{ scale }], flex: 1 }}>
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={() => onPress(section)}
-        onPressIn={pressIn}
-        onPressOut={pressOut}
-        style={{
-          backgroundColor: WHITE,
-          borderRadius: 16,
-          padding: 16,
-          minHeight: 138,
-          borderWidth: 1,
-          borderColor: bookmarked ? "rgba(8,21,143,0.25)" : BORDER,
-          shadowColor: "rgba(8,21,143,0.06)",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 1,
-          shadowRadius: 8,
-          elevation: 2,
-          justifyContent: "space-between",
-        }}
-      >
-        {/* Icon + bookmark row */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: 12,
-          }}
-        >
-          <View
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              backgroundColor: "rgba(8,21,143,0.08)",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <MaterialIcons name={section.icon as any} size={24} color={BLUE} />
-          </View>
-          <TouchableOpacity
-            onPress={onBookmark}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 8,
-              backgroundColor: bookmarked
-                ? "rgba(8,21,143,0.10)"
-                : "rgba(8,21,143,0.04)",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <MaterialIcons
-              name={bookmarked ? "bookmark" : "bookmark-border"}
-              size={16}
-              color={bookmarked ? BLUE : MUTED}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Text */}
-        <View>
-          <Text
-            numberOfLines={2}
-            style={{
-              fontFamily: "Inter_700Bold",
-              fontSize: 13,
-              color: BLUE,
-              lineHeight: 18,
-              marginBottom: 3,
-            }}
-          >
-            {section.title}
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={{
-              fontFamily: "Inter_400Regular",
-              fontSize: 11,
-              color: MUTED,
-            }}
-          >
-            {section.description}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
-
-// ─── Search Result Card ───────────────────────────────────────────
-
-function SearchResultCard({
-  result,
-  onPress,
-}: {
-  result: SearchResult;
-  onPress: () => void;
-}) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const pressIn = () =>
-    Animated.timing(scale, {
-      toValue: 0.98,
-      duration: 100,
-      easing: EASE,
-      useNativeDriver: true,
-    }).start();
-  const pressOut = () =>
-    Animated.timing(scale, {
-      toValue: 1,
-      duration: 180,
-      easing: EASE,
-      useNativeDriver: true,
-    }).start();
-
-  return (
-    <Animated.View style={{ transform: [{ scale }], marginBottom: 10 }}>
+    <Animated.View style={[s.quickItem, { transform: [{ scale }] }]}>
       <TouchableOpacity
         activeOpacity={1}
         onPress={onPress}
-        onPressIn={pressIn}
-        onPressOut={pressOut}
-        style={{
-          backgroundColor: WHITE,
-          borderRadius: 14,
-          padding: 14,
-          borderWidth: 1,
-          borderColor: BORDER,
-          shadowColor: "rgba(8,21,143,0.05)",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 1,
-          shadowRadius: 6,
-          elevation: 2,
-        }}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.92, useNativeDriver: true }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 4 }).start()}
+        style={s.quickBtn}
       >
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginBottom: result.snippet ? 8 : 0,
-          }}
+        <LinearGradient
+          colors={gradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={s.quickGradient}
         >
-          <View
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              backgroundColor: "rgba(8,21,143,0.07)",
-              alignItems: "center",
-              justifyContent: "center",
-              marginRight: 10,
-            }}
-          >
-            <MaterialIcons
-              name={result.section.icon as any}
-              size={18}
-              color={BLUE}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                fontFamily: "Inter_600SemiBold",
-                fontSize: 13,
-                color: BLUE,
-              }}
-              numberOfLines={1}
-            >
-              {result.section.title}
-            </Text>
-            <Text
-              style={{
-                fontFamily: "Inter_400Regular",
-                fontSize: 11,
-                color: MUTED,
-              }}
-            >
-              {result.section.titleEn}
-            </Text>
-          </View>
-          <MaterialIcons name="chevron-right" size={18} color={MUTED} />
-        </View>
-        {result.snippet ? (
-          <Text
-            style={{
-              fontFamily: "Inter_400Regular",
-              fontSize: 13,
-              lineHeight: 20,
-              color: BODY,
-            }}
-            numberOfLines={3}
-          >
-            {result.snippet}
-          </Text>
-        ) : null}
+          <MaterialIcons name={icon as any} size={24} color={WHITE} />
+        </LinearGradient>
+        <Text style={s.quickLabel}>{label}</Text>
       </TouchableOpacity>
     </Animated.View>
   );
 }
 
-// ─── Search Skeleton ──────────────────────────────────────────────
+// ─── Stats strip ───────────────────────────────────────────────────
 
-function SearchSkeleton() {
-  const op = useRef(new Animated.Value(0.5)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(op, {
-          toValue: 1,
-          duration: 650,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(op, {
-          toValue: 0.5,
-          duration: 650,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  }, []);
+function StatsStrip({ user, onPress }: { user: any; onPress: () => void }) {
+  const items = [
+    { label: "Голч", value: user.gpa != null ? user.gpa.toFixed(2) : "—", icon: "grade" as const, color: GOLD },
+    { label: "Кредит", value: user.total_credits != null ? String(user.total_credits) : "—", icon: "menu-book" as const, color: BLUE },
+    { label: "Элссэн", value: user.admission_year ? `20${user.admission_year}` : "—", icon: "calendar-today" as const, color: "#059669" },
+  ];
+
   return (
-    <Animated.View
-      style={{
-        opacity: op,
-        backgroundColor: WHITE,
-        borderRadius: 14,
-        padding: 14,
-        marginBottom: 10,
-        borderWidth: 1,
-        borderColor: BORDER,
-      }}
-    >
-      <View
-        style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}
-      >
-        <View
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            backgroundColor: BG,
-            marginRight: 10,
-          }}
-        />
-        <View>
-          <View
-            style={{
-              width: 140,
-              height: 12,
-              borderRadius: 6,
-              backgroundColor: BG,
-              marginBottom: 6,
-            }}
-          />
-          <View
-            style={{
-              width: 80,
-              height: 10,
-              borderRadius: 6,
-              backgroundColor: BG,
-            }}
-          />
-        </View>
-      </View>
-      <View
-        style={{
-          width: "100%",
-          height: 11,
-          borderRadius: 6,
-          backgroundColor: BG,
-          marginBottom: 6,
-        }}
-      />
-      <View
-        style={{
-          width: "80%",
-          height: 11,
-          borderRadius: 6,
-          backgroundColor: BG,
-        }}
-      />
-    </Animated.View>
+    <TouchableOpacity activeOpacity={0.8} onPress={onPress} style={s.statsCard}>
+      {items.map((item, i) => (
+        <React.Fragment key={item.label}>
+          <View style={s.statItem}>
+            <View style={[s.statIconWrap, { backgroundColor: item.color + "14" }]}>
+              <MaterialIcons name={item.icon} size={16} color={item.color} />
+            </View>
+            <Text style={s.statValue}>{item.value}</Text>
+            <Text style={s.statLabel}>{item.label}</Text>
+          </View>
+          {i < items.length - 1 && <View style={s.statDivider} />}
+        </React.Fragment>
+      ))}
+    </TouchableOpacity>
   );
 }
 
-// ─── Recent Document Card ─────────────────────────────────────────
+// ─── News card (horizontal) ────────────────────────────────────────
 
-function RecentDocCard({ item, isNew }: { item: QuickLink; isNew: boolean }) {
-  const [opening, setOpening] = useState(false);
+function NewsCard({ item, index, onPress }: { item: NewsItem; index: number; onPress: () => void }) {
   const scale = useRef(new Animated.Value(1)).current;
+  const op    = useRef(new Animated.Value(0)).current;
+  const x     = useRef(new Animated.Value(20)).current;
 
-  const pressIn = () =>
-    Animated.timing(scale, {
-      toValue: 0.96,
-      duration: 80,
-      easing: EASE,
-      useNativeDriver: true,
-    }).start();
-  const pressOut = () =>
-    Animated.timing(scale, {
-      toValue: 1,
-      duration: 160,
-      easing: EASE,
-      useNativeDriver: true,
-    }).start();
-
-  const handleOpen = async () => {
-    setOpening(true);
-    try {
-      await WebBrowser.openBrowserAsync(item.url, {
-        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-      });
-    } finally {
-      setOpening(false);
-    }
-  };
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(op, { toValue: 1, duration: 350, delay: index * 60, easing: EASE, useNativeDriver: true }),
+      Animated.timing(x,  { toValue: 0, duration: 350, delay: index * 60, easing: EASE, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View style={[s.newsCardWrap, { opacity: op, transform: [{ translateX: x }, { scale }] }]}>
       <TouchableOpacity
         activeOpacity={1}
-        onPress={handleOpen}
-        onPressIn={pressIn}
-        onPressOut={pressOut}
-        style={{
-          width: 158,
-          backgroundColor: WHITE,
-          borderRadius: 16,
-          padding: 14,
-          borderWidth: 1,
-          borderColor: BORDER,
-          shadowColor: "rgba(8,21,143,0.06)",
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: 1,
-          shadowRadius: 10,
-          elevation: 3,
-        }}
+        onPress={onPress}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 4 }).start()}
       >
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            marginBottom: 10,
-          }}
-        >
-          <View
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              backgroundColor: "rgba(8,21,143,0.07)",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {opening ? (
-              <ActivityIndicator size="small" color={BLUE} />
-            ) : (
-              <MaterialIcons name="picture-as-pdf" size={19} color={BLUE} />
-            )}
+        <Image source={coverUri(item)} style={s.newsImg} resizeMode="cover" />
+        <LinearGradient
+          colors={["transparent", "rgba(8,12,80,0.85)"]}
+          locations={[0.3, 1]}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={s.newsContent}>
+          <Text style={s.newsTitle} numberOfLines={2}>{item.title}</Text>
+          <View style={s.newsTimePill}>
+            <MaterialIcons name="access-time" size={10} color="rgba(255,255,255,0.7)" />
+            <Text style={s.newsTime}>{timeAgo(item.created_at)}</Text>
           </View>
-          {isNew && (
-            <View
-              style={{
-                backgroundColor: GOLD,
-                borderRadius: 5,
-                paddingHorizontal: 6,
-                paddingVertical: 2,
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: "Inter_700Bold",
-                  fontSize: 9,
-                  color: BODY,
-                  letterSpacing: 0.4,
-                }}
-              >
-                ШИНЭ
-              </Text>
-            </View>
-          )}
         </View>
-
-        <Text
-          numberOfLines={2}
-          style={{
-            fontFamily: "Inter_600SemiBold",
-            fontSize: 12,
-            color: BLUE,
-            lineHeight: 17,
-            marginBottom: 6,
-          }}
-        >
-          {item.title}
-        </Text>
-        <Text
-          style={{
-            fontFamily: "Inter_400Regular",
-            fontSize: 11,
-            color: MUTED,
-            letterSpacing: 0.2,
-          }}
-        >
-          {item.category || "PDF"}
-        </Text>
       </TouchableOpacity>
     </Animated.View>
   );
 }
+
+// ─── Chapter card (horizontal) ────────────────────────────────────
+
+function ChapterCard({ section, index, onPress }: {
+  section: HandbookSection; index: number; onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const op    = useRef(new Animated.Value(0)).current;
+  const x     = useRef(new Animated.Value(16)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(op, { toValue: 1, duration: 320, delay: index * 50, easing: EASE, useNativeDriver: true }),
+      Animated.timing(x,  { toValue: 0, duration: 320, delay: index * 50, easing: EASE, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View style={[s.chapterWrap, { opacity: op, transform: [{ translateX: x }, { scale }] }]}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onPress}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.95, useNativeDriver: true }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 4 }).start()}
+        style={s.chapterCard}
+      >
+        <View style={s.chapterIconWrap}>
+          <MaterialIcons name={section.icon as any} size={22} color={BLUE} />
+        </View>
+        <Text style={s.chapterTitle} numberOfLines={2}>{section.title}</Text>
+        <Text style={s.chapterDesc} numberOfLines={1}>{section.description}</Text>
+        <View style={s.chapterArrow}>
+          <MaterialIcons name="arrow-forward" size={12} color={BLUE} />
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ─── AI Banner ─────────────────────────────────────────────────────
+
+function AIBanner({ onPress }: { onPress: () => void }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  return (
+    <Animated.View style={{ transform: [{ scale }], marginTop: 24, marginBottom: 8 }}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onPress}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 4 }).start()}
+      >
+        <LinearGradient
+          colors={[BLUE, "#1a2dd4"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={s.aiBanner}
+        >
+          {/* Decorative circles */}
+          <View style={s.aiDecor1} />
+          <View style={s.aiDecor2} />
+
+          <View style={s.aiRow}>
+            <View style={s.aiIconWrap}>
+              <MaterialIcons name="auto-awesome" size={26} color={GOLD} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={s.aiTitleRow}>
+                <Text style={s.aiTitle}>AI Туслах</Text>
+                <View style={s.betaBadge}><Text style={s.betaText}>BETA</Text></View>
+              </View>
+              <Text style={s.aiDesc}>Гарын авлагаас AI-аар хариулт авах</Text>
+            </View>
+            <View style={s.aiChevron}>
+              <MaterialIcons name="arrow-forward" size={18} color={WHITE} />
+            </View>
+          </View>
+
+          {/* Quick prompts */}
+          <View style={s.aiPrompts}>
+            <View style={s.aiPromptChip}>
+              <Text style={s.aiPromptText}>Тэтгэлэг</Text>
+            </View>
+            <View style={s.aiPromptChip}>
+              <Text style={s.aiPromptText}>Элсэлт</Text>
+            </View>
+            <View style={s.aiPromptChip}>
+              <Text style={s.aiPromptText}>Кредит</Text>
+            </View>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ─── Styles ────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: BG },
+
+  // Hero
+  heroBg: { overflow: "hidden" },
+  orbGold: {
+    position: "absolute",
+    top: -60, right: -50,
+    width: 180, height: 180, borderRadius: 90,
+    backgroundColor: GOLD, opacity: 0.12,
+  },
+  orbBlue: {
+    position: "absolute",
+    top: 40, left: -80,
+    width: 220, height: 220, borderRadius: 110,
+    backgroundColor: "#FFFFFF", opacity: 0.05,
+  },
+  orbTiny: {
+    position: "absolute",
+    top: 90, right: 60,
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: GOLD, opacity: 0.8,
+  },
+  hero: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 22 },
+  heroTopRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    marginBottom: 22,
+  },
+  logo: { width: 180, height: 34 },
+  heroActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  heroIconBtn: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.15)",
+    alignItems: "center", justifyContent: "center",
+  },
+  heroBadge: {
+    position: "absolute", top: -4, right: -4,
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: GOLD, alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: BLUE,
+  },
+  heroBadgeText: { fontFamily: "Inter_700Bold", fontSize: 9, color: BODY },
+  heroAvatarBtn: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: "rgba(255,194,13,0.2)",
+    borderWidth: 1, borderColor: "rgba(255,194,13,0.4)",
+    alignItems: "center", justifyContent: "center",
+  },
+  heroAvatarText: { fontFamily: "Inter_700Bold", fontSize: 13, color: GOLD },
+
+  greetingLabel: {
+    fontFamily: "Inter_400Regular", fontSize: 14,
+    color: "rgba(255,255,255,0.6)", marginBottom: 2,
+  },
+  greetingName: {
+    fontFamily: "Inter_700Bold", fontSize: 28,
+    color: WHITE, letterSpacing: -0.5,
+  },
+  idRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },
+  idPill: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "rgba(255,194,13,0.15)",
+    borderWidth: 1, borderColor: "rgba(255,194,13,0.3)",
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,
+  },
+  idText: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: GOLD, letterSpacing: 0.8 },
+  deptText: {
+    fontFamily: "Inter_400Regular", fontSize: 12,
+    color: "rgba(255,255,255,0.5)", flex: 1,
+  },
+  heroCurve: {
+    height: 40, backgroundColor: BG,
+    borderTopLeftRadius: 32, borderTopRightRadius: 32,
+    marginTop: -12,
+  },
+
+  body: { paddingHorizontal: 16, paddingBottom: 120 },
+
+  // Section header
+  sectionHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    marginBottom: 14, marginTop: 24,
+  },
+  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 17, color: BODY, letterSpacing: -0.3 },
+  sectionActionBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  sectionAction: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: BLUE },
+
+  // Quick actions
+  quickGrid: { flexDirection: "row", gap: 10, marginTop: 4 },
+  quickItem: { flex: 1 },
+  quickBtn: {
+    alignItems: "center", backgroundColor: WHITE, borderRadius: 18,
+    paddingVertical: 18, paddingHorizontal: 4,
+    shadowColor: "rgba(8,21,143,0.08)", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1, shadowRadius: 12, elevation: 3,
+  },
+  quickGradient: {
+    width: 48, height: 48, borderRadius: 14,
+    alignItems: "center", justifyContent: "center", marginBottom: 10,
+  },
+  quickLabel: { fontFamily: "Inter_600SemiBold", fontSize: 11, color: BODY, textAlign: "center" },
+
+  // Stats strip
+  statsCard: {
+    flexDirection: "row", backgroundColor: WHITE, borderRadius: 18,
+    padding: 16, marginTop: 18, alignItems: "center",
+    shadowColor: "rgba(8,21,143,0.08)", shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1, shadowRadius: 12, elevation: 3,
+  },
+  statItem: { flex: 1, alignItems: "center" },
+  statIconWrap: {
+    width: 32, height: 32, borderRadius: 10,
+    alignItems: "center", justifyContent: "center", marginBottom: 6,
+  },
+  statValue: { fontFamily: "Inter_700Bold", fontSize: 20, color: BODY, letterSpacing: -0.5 },
+  statLabel: { fontFamily: "Inter_400Regular", fontSize: 11, color: MUTED, marginTop: 2 },
+  statDivider: { width: 1, height: 40, backgroundColor: "rgba(8,21,143,0.06)" },
+
+  // Horizontal scroll
+  hScroll: { marginHorizontal: -16, paddingHorizontal: 0 },
+  hScrollContent: { gap: 12, paddingHorizontal: 16, paddingRight: 16 },
+
+  // News card
+  newsCardWrap: {
+    width: 200, height: 140, borderRadius: 18, overflow: "hidden",
+    shadowColor: "rgba(8,21,143,0.15)", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1, shadowRadius: 12, elevation: 4,
+  },
+  newsImg: { width: "100%", height: "100%" },
+  newsContent: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 12 },
+  newsTitle: {
+    fontFamily: "Inter_600SemiBold", fontSize: 13, color: WHITE,
+    lineHeight: 18, marginBottom: 6,
+  },
+  newsTimePill: { flexDirection: "row", alignItems: "center", gap: 4 },
+  newsTime: { fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.7)" },
+
+  // Chapter card
+  chapterWrap: { width: 140 },
+  chapterCard: {
+    backgroundColor: WHITE, borderRadius: 18, padding: 16,
+    minHeight: 150,
+    shadowColor: "rgba(8,21,143,0.08)", shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1, shadowRadius: 10, elevation: 2,
+  },
+  chapterIconWrap: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: "rgba(8,21,143,0.07)",
+    alignItems: "center", justifyContent: "center", marginBottom: 12,
+  },
+  chapterTitle: {
+    fontFamily: "Inter_600SemiBold", fontSize: 13, color: BODY,
+    lineHeight: 18, marginBottom: 4,
+  },
+  chapterDesc: { fontFamily: "Inter_400Regular", fontSize: 10, color: MUTED, marginBottom: 8 },
+  chapterArrow: {
+    width: 24, height: 24, borderRadius: 8,
+    backgroundColor: "rgba(8,21,143,0.06)",
+    alignItems: "center", justifyContent: "center",
+    alignSelf: "flex-end", marginTop: "auto",
+  },
+
+  // AI Banner
+  aiBanner: {
+    borderRadius: 22, padding: 20, overflow: "hidden",
+    shadowColor: "rgba(8,21,143,0.35)", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1, shadowRadius: 20, elevation: 8,
+  },
+  aiDecor1: {
+    position: "absolute", top: -30, right: -30,
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: "rgba(255,194,13,0.08)",
+  },
+  aiDecor2: {
+    position: "absolute", bottom: -20, left: -20,
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  aiRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  aiIconWrap: {
+    width: 50, height: 50, borderRadius: 16,
+    backgroundColor: "rgba(255,194,13,0.15)",
+    borderWidth: 1, borderColor: "rgba(255,194,13,0.3)",
+    alignItems: "center", justifyContent: "center",
+  },
+  aiTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 3 },
+  aiTitle: { fontFamily: "Inter_700Bold", fontSize: 16, color: WHITE },
+  aiDesc: { fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.6)" },
+  betaBadge: { backgroundColor: GOLD, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  betaText: { fontFamily: "Inter_700Bold", fontSize: 9, color: BODY, letterSpacing: 0.5 },
+  aiChevron: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center", justifyContent: "center",
+  },
+  aiPrompts: { flexDirection: "row", gap: 8, marginTop: 14 },
+  aiPromptChip: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.15)",
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  aiPromptText: { fontFamily: "Inter_500Medium", fontSize: 11, color: "rgba(255,255,255,0.75)" },
+});

@@ -21,6 +21,12 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class TokenWithUser(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: "UserResponse"
+
+
 class TokenData(BaseModel):
     student_id: Optional[str] = None
 
@@ -32,6 +38,8 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: Optional[str] = None
+    branch: Optional[str] = None
+    department: Optional[str] = None
     major: Optional[str] = None
     gpa: Optional[float] = Field(None, ge=0.0, le=4.0)
     total_credits: Optional[int] = Field(None, ge=0)
@@ -52,6 +60,8 @@ class UserResponse(BaseModel):
     student_id: str
     email: str
     full_name: Optional[str]
+    branch: Optional[str]
+    department: Optional[str]
     major: Optional[str]
     gpa: Optional[float]
     total_credits: Optional[int]
@@ -92,6 +102,7 @@ class NewsSectionResponse(BaseModel):
 class NewsCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     cover_image_url: Optional[str] = None
+    is_special: bool = False
     sections: list[NewsSectionCreate] = Field(default_factory=list)
     # legacy single-body fallback (used when sections is empty)
     content: Optional[str] = None
@@ -101,6 +112,7 @@ class NewsResponse(BaseModel):
     id: int
     title: str
     cover_image_url: Optional[str]
+    is_special: bool
     content: Optional[str]          # legacy
     sections: list[NewsSectionResponse] = []
     author_id: int

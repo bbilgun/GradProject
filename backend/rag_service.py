@@ -1,6 +1,6 @@
 """
-RAGService — Handbook Vector Search (FAISS + sentence-transformers)
-Indexes the MUST Student Handbook and performs semantic search.
+RAGService — Hybrid Search (FAISS Semantic + BM25 Keyword + RRF Fusion)
+Indexes the MUST Student Handbook and performs hybrid retrieval.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import List
 
 import numpy as np
 import faiss
+from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 
 # ─────────────────────────────────────────────────────────────────
@@ -88,6 +89,38 @@ class SearchResult:
     category: str = ""
 
 
+def _tokenize(text: str) -> list[str]:
+    """Simple whitespace + lowercased tokenizer for BM25."""
+    return text.lower().split()
+
+
+def _reciprocal_rank_fusion(
+    ranked_lists: list[list[int]],
+    k: int = 60,
+) -> list[tuple[int, float]]:
+    """
+    Reciprocal Rank Fusion (Cormack et al., 2009).
+
+    Takes multiple ranked lists of chunk indices and returns a single
+    fused ranking. Each item's score = sum(1 / (k + rank)) across all
+    lists it appears in.
+
+    Parameters
+    ----------
+    ranked_lists : list of lists of chunk indices, each ordered by relevance.
+    k            : smoothing constant (default 60, standard in literature).
+
+    Returns
+    -------
+    List of (chunk_index, rrf_score) sorted by descending score.
+    """
+    scores: dict[int, float] = {}
+    for ranked in ranked_lists:
+        for rank, idx in enumerate(ranked, start=1):
+            scores[idx] = scores.get(idx, 0.0) + 1.0 / (k + rank)
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+
 class RAGService:
     MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 
@@ -96,14 +129,29 @@ class RAGService:
         self.model: SentenceTransformer | None = None
         self.index: faiss.IndexFlatIP | None = None
         self.chunks: List[Chunk] = []
+        self._bm25: BM25Okapi | None = None
+        self._bm25_corpus: list[list[str]] = []  # tokenized texts parallel to self.chunks
         self._ready = False
+
+    # ─────────────────────────────────────────────────────────────
+    # BM25 helpers
+    # ─────────────────────────────────────────────────────────────
+
+    def _rebuild_bm25(self) -> None:
+        """(Re)build the BM25 index from the current chunk list."""
+        if not self.chunks:
+            self._bm25 = None
+            self._bm25_corpus = []
+            return
+        self._bm25_corpus = [_tokenize(c.text) for c in self.chunks]
+        self._bm25 = BM25Okapi(self._bm25_corpus)
 
     # ─────────────────────────────────────────────────────────────
     # Public API
     # ─────────────────────────────────────────────────────────────
 
     def build(self) -> None:
-        """Load handbook → chunk → embed → FAISS index."""
+        """Load handbook → chunk → embed → FAISS index + BM25 index."""
         print("[RAG] Loading model…")
         self.model = SentenceTransformer(self.MODEL_NAME)
 
@@ -122,8 +170,11 @@ class RAGService:
         self.index = faiss.IndexFlatIP(dim)
         self.index.add(embeddings.astype(np.float32))
 
+        print("[RAG] Building BM25 index…")
+        self._rebuild_bm25()
+
         self._ready = True
-        print("[RAG] Ready ✓")
+        print("[RAG] Ready ✓  (hybrid: FAISS + BM25)")
 
     def build_empty(self) -> None:
         """
@@ -137,13 +188,15 @@ class RAGService:
         probe = self.model.encode(["init"], normalize_embeddings=True)
         dim = probe.shape[1]
         self.index = faiss.IndexFlatIP(dim)
+        self._bm25 = None
+        self._bm25_corpus = []
         self._ready = True
         print(f"[RAG] Empty index ready (dim={dim}) ✓")
 
     def add_chunks(self, new_chunks: List[Chunk]) -> int:
         """
-        Embed *new_chunks* and insert them into the live FAISS index.
-        Safe to call after build() or build_empty().
+        Embed *new_chunks* and insert them into the live FAISS index,
+        then rebuild the BM25 index so keyword search covers them too.
 
         Returns the number of chunks actually added.
         """
@@ -155,42 +208,66 @@ class RAGService:
         embeddings = self._embed([c.text for c in new_chunks])
         self.index.add(embeddings.astype(np.float32))
         self.chunks.extend(new_chunks)
+
+        # Rebuild BM25 so the new chunks are searchable via keyword too
+        self._rebuild_bm25()
+
         print(f"[RAG] +{len(new_chunks)} chunks  (total: {len(self.chunks)})")
         return len(new_chunks)
 
     # Score added to priority chunks (tuition, key regulations) to surface them first
     PRIORITY_BOOST = 0.15
 
-    def search(self, query: str, top_k: int = 6) -> List[SearchResult]:
-        """
-        Semantic search across all indexed chunks (handbook + PDFs + web).
-        Priority chunks (e.g. tuition) receive a score boost so they
-        surface at the top for relevant financial/fee queries.
-        """
-        if not self._ready:
-            raise RuntimeError("RAGService not built yet. Call build() first.")
-
+    def _search_semantic(self, query: str, top_k: int) -> list[int]:
+        """Return chunk indices ranked by FAISS cosine similarity."""
         q_emb = self._embed([query])
-        # Fetch extra candidates so post-boost re-ranking can promote priority chunks
-        raw_k = min(top_k * 4, len(self.chunks)) if self.chunks else top_k * 4
+        raw_k = min(top_k, len(self.chunks)) if self.chunks else top_k
         scores, indices = self.index.search(q_emb.astype(np.float32), raw_k)
 
-        # Build scored candidates, applying priority boost
-        candidates: list[tuple[float, Chunk]] = []
+        # Build list applying priority boost, then sort
+        candidates: list[tuple[float, int]] = []
         for score, idx in zip(scores[0], indices[0]):
             if idx == -1:
                 continue
             chunk = self.chunks[idx]
             adjusted = float(score) + (self.PRIORITY_BOOST if chunk.priority else 0.0)
-            candidates.append((adjusted, chunk))
+            candidates.append((adjusted, int(idx)))
 
-        # Sort by adjusted score descending
         candidates.sort(key=lambda x: x[0], reverse=True)
+        return [idx for _, idx in candidates]
 
-        # De-duplicate by section_id (keep highest-scored chunk per section)
+    def _search_bm25(self, query: str, top_k: int) -> list[int]:
+        """Return chunk indices ranked by BM25 keyword relevance."""
+        if self._bm25 is None or not self._bm25_corpus:
+            return []
+        tokenized_query = _tokenize(query)
+        scores = self._bm25.get_scores(tokenized_query)
+        # Get top_k indices with highest BM25 scores (exclude zero-score)
+        top_indices = np.argsort(scores)[::-1][:top_k]
+        return [int(i) for i in top_indices if scores[i] > 0]
+
+    def search(self, query: str, top_k: int = 6) -> List[SearchResult]:
+        """
+        Hybrid search: fetch candidates from both FAISS (semantic) and
+        BM25 (keyword), fuse with Reciprocal Rank Fusion, then deduplicate.
+        """
+        if not self._ready:
+            raise RuntimeError("RAGService not built yet. Call build() first.")
+
+        # Fetch more candidates from each retriever so RRF has enough to work with
+        fetch_k = min(top_k * 4, len(self.chunks)) if self.chunks else top_k * 4
+
+        semantic_ranked = self._search_semantic(query, fetch_k)
+        bm25_ranked = self._search_bm25(query, fetch_k)
+
+        # Fuse the two ranked lists via RRF
+        fused = _reciprocal_rank_fusion([semantic_ranked, bm25_ranked], k=60)
+
+        # De-duplicate by (section_id, source_url) — keep highest RRF-scored chunk per section
         seen: set[str] = set()
         results: List[SearchResult] = []
-        for adjusted_score, chunk in candidates:
+        for idx, rrf_score in fused:
+            chunk = self.chunks[idx]
             dedup_key = f"{chunk.section_id}::{chunk.source_url}"
             if dedup_key in seen:
                 continue
@@ -200,7 +277,7 @@ class RAGService:
                     section_id=chunk.section_id,
                     section_title=chunk.section_title,
                     text=chunk.text[:400],
-                    score=adjusted_score,
+                    score=rrf_score,
                     chunk_index=chunk.chunk_index,
                     source_url=chunk.source_url,
                     category=chunk.category,

@@ -74,6 +74,9 @@ async def lifespan(app: FastAPI):
     with engine.connect() as conn:
         for col, ddl in [
             ("cover_image_url", "ALTER TABLE news ADD COLUMN cover_image_url VARCHAR(1000)"),
+            ("is_special",      "ALTER TABLE news ADD COLUMN is_special BOOLEAN NOT NULL DEFAULT 0"),
+            ("branch",     "ALTER TABLE users ADD COLUMN branch VARCHAR(255)"),
+            ("department", "ALTER TABLE users ADD COLUMN department VARCHAR(255)"),
         ]:
             try:
                 conn.execute(text(ddl))
@@ -316,12 +319,20 @@ async def summarize(req: SummarizeRequest):
     return SummarizeResponse(summary=_local_summarize(req.text))
 
 
-# Short system prompt = fewer input tokens billed every request
+# ─────────────────────────────────────────────────────────────────
+# Chat — Gemini 2.5 Flash with Function Calling + RAG
+# ─────────────────────────────────────────────────────────────────
+
 _SYSTEM_PROMPT = (
     "Та ШУТИС-ийн оюутны AI туслах. "
     "Гарын авлагын мэдээлэл өгөгдвөл түүнд тулгуурлан хариул. "
     "Энгийн яриа бол байгалийн байдлаар хариул. "
-    "Хариултаа үргэлж бүрэн дуусга — дундаас таслахгүй."
+    "Хариултаа үргэлж бүрэн дуусга — дундаас таслахгүй. "
+    "Хэрэв хэрэглэгч сүүлийн мэдээ, яг одоо, өнөөдөр, энэ долоо хоног зэрэг "
+    "цаг хугацаатай холбоотой мэдээлэл асуувал search_must_website функцээр "
+    "must.edu.mn-ээс шинэ мэдээлэл авч хариул. "
+    "Хэрэв хэрэглэгч тодорхой URL-ын тухай асуувал fetch_must_page функцээр "
+    "тухайн хуудсыг уншиж хариул."
 )
 
 # Casual / greeting keywords — skip RAG search for these to save tokens
@@ -353,18 +364,77 @@ def _truncate(text: str, max_chars: int = 400) -> str:
     return text[:max_chars] + "…" if len(text) > max_chars else text
 
 
+# ── Gemini function-calling tool definitions ─────────────────────
+
+def _build_gemini_tools():
+    """Build the Tool object with web search function declarations."""
+    from google.genai import types
+
+    search_fn = types.FunctionDeclaration(
+        name="search_must_website",
+        description=(
+            "ШУТИС-ийн вэб сайтаас (must.edu.mn) шинэ мэдээ, мэдээлэл хайх. "
+            "Сүүлийн мэдээ, өнөөдрийн мэдээ, энэ долоо хоногийн зэрэг "
+            "цаг хугацаатай холбоотой асуултад ашиглана."
+        ),
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "query": types.Schema(
+                    type="STRING",
+                    description="Хайлтын түлхүүр үг (Монгол эсвэл Англи)",
+                ),
+            },
+            required=["query"],
+        ),
+    )
+
+    fetch_fn = types.FunctionDeclaration(
+        name="fetch_must_page",
+        description=(
+            "must.edu.mn домэйн дээрх тодорхой хуудсыг уншиж, "
+            "агуулгыг текст хэлбэрээр авах."
+        ),
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "url": types.Schema(
+                    type="STRING",
+                    description="must.edu.mn дээрх хуудасны бүтэн URL",
+                ),
+            },
+            required=["url"],
+        ),
+    )
+
+    return types.Tool(functionDeclarations=[search_fn, fetch_fn])
+
+
+# Map function names → async handler functions
+async def _execute_tool_call(name: str, args: dict) -> str:
+    """Execute a tool call and return the result as a string."""
+    from web_search import search_must_website, fetch_must_page
+
+    if name == "search_must_website":
+        return await search_must_website(args.get("query", ""))
+    elif name == "fetch_must_page":
+        return await fetch_must_page(args.get("url", ""))
+    else:
+        return f"Unknown function: {name}"
+
+
 @app.post("/chat")
 async def chat(req: ChatRequest):
     """
-    Conversational AI endpoint powered by Claude Haiku (lowest cost tier).
+    Conversational AI endpoint powered by Gemini 2.5 Flash with
+    function calling for real-time web search.
 
-    Cost controls
-    -------------
-    - Shortest viable system prompt (billed on every request).
-    - Skip RAG search for casual messages.
-    - Top-3 chunks, each truncated to 400 chars.
-    - History capped at last 6 turns.
-    - max_tokens=512 (enough for handbook answers).
+    Flow
+    ----
+    1. Build RAG context from FAISS+BM25 hybrid search (skip for casual).
+    2. Send query + RAG context + tool definitions to Gemini.
+    3. If Gemini returns a function_call → execute it → feed result back.
+    4. Return final text response.
     """
     if not GEMINI_KEY:
         raise HTTPException(
@@ -376,17 +446,17 @@ async def chat(req: ChatRequest):
     context_block = ""
     if not _is_casual(req.query) and rag and rag._ready and len(rag.chunks) > 0:
         try:
-            raw = rag.search(req.query, top_k=3)          # 3 chunks, not 5
+            raw = rag.search(req.query, top_k=3)
             if raw:
                 snippets = "\n---\n".join(
-                    f"[{r.section_title}]\n{_truncate(r.text)}"   # 400 chars each
+                    f"[{r.section_title}]\n{_truncate(r.text)}"
                     for r in raw
                 )
-                context_block = f"\n\nХолбогдох мэдээлэл:\n{snippets}"
+                context_block = f"\n\nГарын авлагын мэдээлэл:\n{snippets}"
         except Exception:
             pass
 
-    # ── 2. Build Gemini history (last 6 turns) ─────────────────
+    # ── 2. Build Gemini conversation history (last 6 turns) ────
     gemini_history = []
     for m in req.history[-6:]:
         if m.role == "user":
@@ -394,33 +464,90 @@ async def chat(req: ChatRequest):
         elif m.role == "assistant":
             gemini_history.append({"role": "model", "parts": [{"text": m.content}]})
 
-    user_content = req.query + context_block
+    user_content = req.query
+    if context_block:
+        user_content += context_block
 
-    # ── 3. Call Gemini ─────────────────────────────────────────
-    def _call_gemini():
-        from google.genai import types
-        client = _get_ai_client()
-        # Build contents: history + current user message
-        contents = gemini_history + [{"role": "user", "parts": [{"text": user_content}]}]
-        resp = client.models.generate_content(
-            model="models/gemini-2.5-flash",
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=_SYSTEM_PROMPT,
-                max_output_tokens=2048,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
+    # ── 3. Call Gemini with function-calling tools ─────────────
+    from google.genai import types
+
+    tools = _build_gemini_tools()
+    config = types.GenerateContentConfig(
+        system_instruction=_SYSTEM_PROMPT,
+        max_output_tokens=2048,
+        tools=[tools],
+        tool_config=types.ToolConfig(
+            function_calling_config=types.FunctionCallingConfig(
+                mode="AUTO",
             ),
-        )
-        return resp.text
+        ),
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
+    )
+
+    contents = gemini_history + [{"role": "user", "parts": [{"text": user_content}]}]
 
     try:
-        reply = await asyncio.get_event_loop().run_in_executor(None, _call_gemini)
+        # Initial Gemini call (may return text OR a function_call)
+        def _call_initial():
+            client = _get_ai_client()
+            return client.models.generate_content(
+                model="models/gemini-2.5-flash",
+                contents=contents,
+                config=config,
+            )
+
+        response = await asyncio.get_event_loop().run_in_executor(None, _call_initial)
+
+        # ── 4. Handle function calls (single round) ───────────
+        # Check if Gemini wants to call a function
+        function_call = None
+        for part in (response.candidates[0].content.parts or []):
+            if part.function_call:
+                function_call = part.function_call
+                break
+
+        if function_call:
+            fn_name = function_call.name
+            fn_args = dict(function_call.args) if function_call.args else {}
+            print(f"[Chat] Gemini called tool: {fn_name}({fn_args})")
+
+            # Execute the tool
+            tool_result = await _execute_tool_call(fn_name, fn_args)
+
+            # Build the function-call + function-response turn
+            contents.append({
+                "role": "model",
+                "parts": [{"functionCall": {"name": fn_name, "args": fn_args}}],
+            })
+            contents.append({
+                "role": "user",
+                "parts": [{"functionResponse": {
+                    "name": fn_name,
+                    "response": {"result": tool_result},
+                }}],
+            })
+
+            # Second Gemini call with the tool result
+            def _call_with_tool_result():
+                client = _get_ai_client()
+                return client.models.generate_content(
+                    model="models/gemini-2.5-flash",
+                    contents=contents,
+                    config=config,
+                )
+
+            response = await asyncio.get_event_loop().run_in_executor(
+                None, _call_with_tool_result
+            )
+
+        reply = response.text
         return {"reply": reply or "Хариу авахад алдаа гарлаа."}
+
     except Exception as exc:
         err = str(exc)
         if "429" in err or "quota" in err.lower() or "ResourceExhausted" in err:
             raise HTTPException(status_code=429, detail="API хүсэлтийн лимит хэтэрлээ. Түр хүлээгээд дахин оролдоно уу.")
-        raise HTTPException(status_code=502, detail="AI үйлчилгээнд алдаа гарлаа. Дахин оролдоно уу.")
+        raise HTTPException(status_code=502, detail=f"AI үйлчилгээнд алдаа гарлаа. Дахин оролдоно уу.")
 
 
 @app.get("/sync", response_model=SyncResponse)

@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ШУТИС Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:       #08158F;
+      --blue-mid:   #0A1DB8;
+      --blue-light: #EEF0FB;
+      --gold:       #E8A800;
+      --gold-bg:    rgba(232,168,0,0.08);
+      --gold-pill:  #FFF3CC;
+      --bg:         #F2F4FA;
+      --surface:    #FFFFFF;
+      --border:     #E4E7F0;
+      --muted:      #8B92A5;
+      --body:       #1A1A2E;
+      --red:        #C53030;
+      --red-bg:     #FFF5F5;
+      --green:      #276749;
+      --green-bg:   #F0FFF4;
+      --radius-sm:  8px;
+      --radius:     14px;
+      --radius-lg:  20px;
+      --shadow-xs:  0 1px 4px rgba(8,21,143,0.06);
+      --shadow-sm:  0 2px 10px rgba(8,21,143,0.08);
+      --shadow-md:  0 6px 24px rgba(8,21,143,0.12);
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      color: var(--body);
+      display: flex; flex-direction: column; align-items: center;
+    }
+
+    /* ════════════════════════════════════════
+       TOP NAV
+    ════════════════════════════════════════ */
+    .nav {
+      width: 100%;
+      background: var(--blue);
+      padding: 0 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 60px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .nav-brand { display: flex; align-items: center; gap: 12px; }
+    .nav-mark {
+      width: 32px; height: 32px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .nav-mark svg { width: 18px; height: 18px; fill: #fff; }
+    .nav-title { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.2px; }
+    .nav-sub   { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 1px; }
+    #nav-session {
+      display: none; align-items: center; gap: 10px;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #48BB78;
+      box-shadow: 0 0 0 2px rgba(72,187,120,0.3);
+      flex-shrink: 0;
+    }
+    #nav-user { font-size: 12px; color: rgba(255,255,255,0.75); font-weight: 500; }
+    .btn-nav-logout {
+      height: 30px; padding: 0 12px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 7px;
+      color: rgba(255,255,255,0.85);
+      font-size: 12px; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+      transition: background .15s;
+    }
+    .btn-nav-logout:hover { background: rgba(255,255,255,0.18); }
+
+    /* ════════════════════════════════════════
+       LAYOUT
+    ════════════════════════════════════════ */
+    .page { width: 100%; max-width: 720px; padding: 28px 20px 80px; }
+
+    /* ════════════════════════════════════════
+       CARD
+    ════════════════════════════════════════ */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-xs);
+    }
+    .card-head {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-head-icon {
+      width: 34px; height: 34px;
+      background: var(--blue-light);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .card-head-icon svg { width: 16px; height: 16px; stroke: var(--blue); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .card-head-title { font-size: 14px; font-weight: 700; color: var(--body); }
+    .card-head-sub   { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+    /* ════════════════════════════════════════
+       FORM ELEMENTS
+    ════════════════════════════════════════ */
+    .field { margin-bottom: 18px; }
+    .field-label {
+      display: block;
+      font-size: 11px; font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.5px; text-transform: uppercase;
+      margin-bottom: 7px;
+    }
+    input[type="text"], input[type="password"], textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 14px; font-family: inherit; color: var(--body);
+      outline: none;
+      transition: border-color .16s, background .16s, box-shadow .16s;
+    }
+    input[type="text"]:focus, input[type="password"]:focus, textarea:focus {
+      border-color: var(--blue);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(8,21,143,0.08);
+    }
+    textarea { resize: vertical; min-height: 100px; }
+
+    /* ════════════════════════════════════════
+       SPECIAL TOGGLE
+    ════════════════════════════════════════ */
+    .special-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--gold-bg);
+      border: 1.5px solid rgba(232,168,0,0.22);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: background .18s;
+      user-select: none;
+    }
+    .special-row:hover { background: rgba(232,168,0,0.13); }
+    .special-row-left { display: flex; align-items: center; gap: 12px; }
+    .special-icon {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, #F6C027, #E8A800);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 8px rgba(232,168,0,0.28);
+      flex-shrink: 0;
+    }
+    .special-icon svg { width: 18px; height: 18px; fill: #fff; }
+    .special-label { font-size: 13px; font-weight: 700; color: var(--body); }
+    .special-hint  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    /* pill switch */
+    .switch {
+      width: 44px; height: 24px;
+      background: #D1D5DB;
+      border-radius: 12px;
+      position: relative;
+      transition: background .2s;
+      flex-shrink: 0;
+    }
+    .switch.on { background: var(--blue); }
+    .switch-knob {
+      position: absolute; top: 2px; left: 2px;
+      width: 20px; height: 20px;
+      background: #fff; border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      transition: transform .22s cubic-bezier(.34,1.56,.64,1);
+    }
+    .switch.on .switch-knob { transform: translateX(20px); }
+
+    /* ════════════════════════════════════════
+       BUTTONS
+    ════════════════════════════════════════ */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      border: none; border-radius: var(--radius);
+      padding: 11px 18px;
+      font-size: 13px; font-weight: 600; font-family: inherit;
+      cursor: pointer;
+      transition: opacity .14s, transform .1s, box-shadow .14s;
+      white-space: nowrap;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
+    .btn-primary {
+      width: 100%; padding: 14px;
+      background: var(--blue); color: #fff;
+      font-size: 14px; font-weight: 700; border-radius: var(--radius-lg);
+      box-shadow: 0 4px 16px rgba(8,21,143,0.28);
+    }
+    .btn-primary:hover { box-shadow: 0 6px 22px rgba(8,21,143,0.36); }
+    .btn-ghost  { background: var(--blue-light); color: var(--blue); }
+    .btn-ghost:hover { background: #E0E4F8; }
+    .btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid rgba(197,48,48,0.14); }
+    .btn-danger:hover { background: #FED7D7; }
+    .btn-outline {
+      background: transparent; color: var(--muted);
+      border: 1.5px dashed var(--border);
+      width: 100%;
+    }
+    .btn-outline:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
+    .btn-sm { padding: 7px 12px; font-size: 12px; border-radius: var(--radius-sm); }
+
+    /* ════════════════════════════════════════
+       ALERTS
+    ════════════════════════════════════════ */
+    .alert {
+      display: none; align-items: center; gap: 10px;
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 13px; font-weight: 500;
+      margin-bottom: 18px;
+    }
+    .alert svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .alert.err { display: flex; background: var(--red-bg); color: var(--red); border: 1px solid rgba(197,48,48,0.18); }
+    .alert.ok  { display: flex; background: var(--green-bg); color: var(--green); border: 1px solid rgba(39,103,73,0.18); }
+
+    /* ════════════════════════════════════════
+       IMAGE UPLOAD
+    ════════════════════════════════════════ */
+    #cover-preview {
+      display: none; width: 100%; max-height: 200px; object-fit: cover;
+      border-radius: var(--radius); margin-bottom: 10px;
+      border: 1px solid var(--border);
+    }
+    .upload-row { display: flex; gap: 8px; }
+    .upload-row .btn-outline { flex: 1; }
+
+    /* ════════════════════════════════════════
+       SECTIONS
+    ════════════════════════════════════════ */
+    .sections-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .sections-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.6px; text-transform: uppercase; }
+    #sections-wrap { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+
+    .sec-block {
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      background: var(--bg);
+      transition: border-color .18s;
+    }
+    .sec-block:focus-within { border-color: rgba(8,21,143,0.3); background: #fff; }
+    .sec-block input[type="text"], .sec-block textarea { background: #fff; }
+    .sec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .sec-num {
+      font-size: 10px; font-weight: 700; color: var(--blue);
+      letter-spacing: 0.7px; text-transform: uppercase;
+      background: var(--blue-light); padding: 4px 10px; border-radius: 5px;
+    }
+    .sec-img-preview {
+      display: none; width: 100%; max-height: 140px; object-fit: cover;
+      border-radius: 10px; margin-bottom: 10px;
+      border: 1px solid var(--border);
+    }
+    .sec-upload-row { display: flex; gap: 8px; }
+    .sec-upload-row .btn-outline { flex: 1; font-size: 12px; padding: 9px; }
+
+    hr.divider { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+
+    /* ════════════════════════════════════════
+       NEWS LIST
+    ════════════════════════════════════════ */
+    #news-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .news-card {
+      display: flex; gap: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: box-shadow .18s, border-color .18s;
+    }
+    .news-card:hover { box-shadow: var(--shadow-sm); border-color: #C9CDE8; }
+    .news-card.is-special { border-left: 3px solid var(--gold); }
+
+    .news-thumb {
+      width: 80px; flex-shrink: 0;
+      background: var(--blue-light);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .news-thumb img { width: 80px; height: 100%; object-fit: cover; display: block; }
+    .news-thumb-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80px; }
+    .news-thumb-placeholder svg { width: 24px; height: 24px; stroke: rgba(8,21,143,0.25); fill: none; stroke-width: 1.5; }
+
+    .news-body { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; min-height: 80px; }
+    .news-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .news-tags { display: flex; gap: 5px; margin-bottom: 5px; flex-wrap: wrap; }
+    .tag {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+      padding: 2px 7px; border-radius: 4px;
+    }
+    .tag-special { background: var(--gold-pill); color: #92600A; }
+    .tag-new     { background: var(--blue-light); color: var(--blue); }
+    .news-title { font-size: 13px; font-weight: 600; color: var(--body); line-height: 1.4; }
+    .news-meta  { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+    .news-actions { padding: 10px 14px 10px 0; display: flex; align-items: center; }
+
+    .empty-state { text-align: center; padding: 36px 0; color: var(--muted); }
+    .empty-state svg { width: 36px; height: 36px; stroke: #C9CDE8; fill: none; stroke-width: 1.5; margin: 0 auto 10px; display: block; }
+    .empty-state p { font-size: 13px; }
+
+    /* ════════════════════════════════════════
+       SPINNER
+    ════════════════════════════════════════ */
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+    .spinner-dark {
+      border-color: rgba(8,21,143,0.15);
+      border-top-color: var(--blue);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-mark">
+      <svg viewBox="0 0 24 24"><path d="M12 3L2 9l10 6 10-6-10-6zM2 17l10 6 10-6M2 13l10 6 10-6"/></svg>
+    </div>
+    <div>
+      <div class="nav-title">ШУТИС Admin</div>
+      <div class="nav-sub">Мэдээ удирдах систем</div>
+    </div>
+  </div>
+  <div id="nav-session">
+    <div class="status-dot"></div>
+    <span id="nav-user"></span>
+    <button class="btn-nav-logout" onclick="doLogout()">Гарах</button>
+  </div>
+</nav>
+
+<div class="page">
+
+  <!-- LOGIN -->
+  <div class="card" id="login-card">
+    <div class="card-head">
+      <div class="card-head-icon">
+        <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      </div>
+      <div>
+        <div class="card-head-title">Нэвтрэх</div>
+        <div class="card-head-sub">Зөвхөн оюутны зөвлөлийн гишүүд</div>
+      </div>
+    </div>
+
+    <div class="alert" id="login-err">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span id="login-err-text"></span>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Оюутны дугаар</label>
+      <input type="text" id="sid" placeholder="B221910027" maxlength="10" />
+    </div>
+    <div class="field">
+      <label class="field-label">Нууц үг</label>
+      <input type="password" id="pw" placeholder="••••••••" />
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()" id="login-btn">Нэвтрэх</button>
+  </div>
+
+  <!-- POST NEWS -->
+  <div class="card" id="post-card" style="display:none">
+    <div class="card-head">
+      <div class="card-head-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </div>
+      <div>
+        <div class="card-head-title">Шинэ мэдээ нийтлэх</div>
+        <div class="card-head-sub">Бүх талбарыг бөглөнө үү</div>
+      </div>
+    </div>
+
+    <div class="alert" id="post-err">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span id="post-err-text"></span>
+    </div>
+
+    <!-- Title -->
+    <div class="field">
+      <label class="field-label">Гарчиг</label>
+      <input type="text" id="title" placeholder="Мэдээний гарчиг…" />
+    </div>
+
+    <!-- Special toggle -->
+    <div class="special-row" onclick="toggleSpecial()">
+      <div class="special-row-left">
+        <div class="special-icon">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <div>
+          <div class="special-label">Онцлох мэдээ</div>
+          <div class="special-hint">Апп-д тусгай каруселд харагдана</div>
+        </div>
+      </div>
+      <div class="switch" id="special-switch"><div class="switch-knob"></div></div>
+    </div>
+    <input type="hidden" id="is-special" value="false" />
+
+    <!-- Cover image -->
+    <div class="field">
+      <label class="field-label">Нүүр зураг — заавал биш</label>
+      <img id="cover-preview" alt="" />
+      <div class="upload-row">
+        <button class="btn btn-outline" onclick="triggerUpload('cover-file')">
+          <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+          <span id="cover-label">Зураг оруулах</span>
+        </button>
+        <button id="cover-remove-btn" class="btn btn-danger btn-sm" style="display:none" onclick="clearCoverImg()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Устгах
+        </button>
+      </div>
+      <input type="file" id="cover-file" accept="image/*" style="display:none"
+        onchange="handleUpload(this,'cover-preview',setCoverUrl,'cover-label')" />
+    </div>
+
+    <hr class="divider" />
+
+    <!-- Sections -->
+    <div class="sections-header">
+      <span class="sections-label">Дэд хэсгүүд</span>
+      <button class="btn btn-ghost btn-sm" onclick="addSection()">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Хэсэг нэмэх
+      </button>
+    </div>
+    <div id="sections-wrap"></div>
+
+    <button class="btn btn-primary" onclick="doPost()" id="submit-btn">Нийтлэх</button>
+  </div>
+
+  <!-- NEWS LIST -->
+  <div class="card" id="list-card" style="display:none">
+    <div class="card-head">
+      <div class="card-head-icon">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+      </div>
+      <div>
+        <div class="card-head-title">Нийтлэгдсэн мэдээнүүд</div>
+        <div class="card-head-sub" id="list-count">Ачаалж байна…</div>
+      </div>
+    </div>
+    <div id="news-list">
+      <div class="empty-state"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><p>Ачаалж байна…</p></div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+  const BASE = location.origin;
+  let token = localStorage.getItem('admin_token') || '';
+  let coverUrl = '';
+  let isSpecial = false;
+  let sectionCount = 0;
+
+  if (token) restoreSession();
+
+  /* ── Toggle ──────────────────────────────────── */
+  function toggleSpecial() {
+    isSpecial = !isSpecial;
+    document.getElementById('is-special').value = String(isSpecial);
+    document.getElementById('special-switch').classList.toggle('on', isSpecial);
+  }
+
+  /* ── Session ─────────────────────────────────── */
+  async function restoreSession() {
+    try {
+      const r = await fetch(`${BASE}/users/me`, { headers: auth() });
+      if (!r.ok) { doLogout(); return; }
+      showDashboard(await r.json());
+    } catch { doLogout(); }
+  }
+
+  /* ── Login ───────────────────────────────────── */
+  async function doLogin() {
+    const sid = document.getElementById('sid').value.trim().toUpperCase();
+    const pw  = document.getElementById('pw').value;
+    clearAlert('login-err');
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Нэвтэрч байна…';
+    try {
+      const r = await fetch(`${BASE}/auth/login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: sid, password: pw }),
+      });
+      const data = await r.json();
+      if (!r.ok) { showAlert('login-err', data.detail || 'Нэвтрэхэд алдаа.', 'err'); return; }
+      const me = await (await fetch(`${BASE}/users/me`, { headers: { Authorization: `Bearer ${data.access_token}` } })).json();
+      if (!['admin','student_council'].includes(me.role)) {
+        showAlert('login-err', 'Зөвхөн оюутны зөвлөлийн гишүүд нэвтэрнэ.', 'err'); return;
+      }
+      token = data.access_token;
+      localStorage.setItem('admin_token', token);
+      showDashboard(me);
+    } catch { showAlert('login-err', 'Серверт холбогдоход алдаа.', 'err'); }
+    finally { btn.disabled = false; btn.textContent = 'Нэвтрэх'; }
+  }
+
+  function doLogout() {
+    token = ''; localStorage.removeItem('admin_token');
+    show('login-card'); hide('post-card'); hide('list-card');
+    document.getElementById('nav-session').style.display = 'none';
+  }
+
+  function showDashboard(user) {
+    hide('login-card'); show('post-card'); show('list-card');
+    document.getElementById('nav-session').style.display = 'flex';
+    document.getElementById('nav-user').textContent = `${user.full_name || user.student_id}`;
+    if (!document.getElementById('sections-wrap').children.length) addSection();
+    loadNews();
+  }
+
+  /* ── Sections ────────────────────────────────── */
+  function addSection() {
+    const idx  = sectionCount++;
+    const wrap = document.getElementById('sections-wrap');
+    const num  = wrap.children.length + 1;
+    const div  = document.createElement('div');
+    div.className = 'sec-block'; div.id = `sec-${idx}`;
+    div.innerHTML = `
+      <div class="sec-head">
+        <span class="sec-num">Хэсэг ${num}</span>
+        <button class="btn btn-danger btn-sm" onclick="removeSection('sec-${idx}')">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          Устгах
+        </button>
+      </div>
+      <div class="field">
+        <label class="field-label">Дэд гарчиг — заавал биш</label>
+        <input type="text" id="sec-sub-${idx}" placeholder="Дэд гарчиг…" />
+      </div>
+      <div class="field">
+        <label class="field-label">Агуулга</label>
+        <textarea id="sec-body-${idx}" placeholder="Хэсгийн агуулга…" rows="4"></textarea>
+      </div>
+      <img id="sec-img-${idx}" class="sec-img-preview" alt="" />
+      <div class="sec-upload-row">
+        <button class="btn btn-outline" onclick="triggerUpload('sec-file-${idx}')">
+          <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+          <span id="sec-lbl-${idx}">Зураг нэмэх — заавал биш</span>
+        </button>
+        <button id="sec-rm-${idx}" class="btn btn-danger btn-sm" style="display:none" onclick="clearSecImg(${idx})">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Устгах
+        </button>
+      </div>
+      <input type="file" id="sec-file-${idx}" accept="image/*" style="display:none"
+        onchange="handleUpload(this,'sec-img-${idx}',u=>setSecImg(${idx},u),'sec-lbl-${idx}')" />
+      <input type="hidden" id="sec-url-${idx}" value="" />`;
+    wrap.appendChild(div);
+    renumber();
+  }
+
+  function removeSection(id) { document.getElementById(id)?.remove(); renumber(); }
+  function renumber() {
+    document.querySelectorAll('.sec-num').forEach((el,i) => { el.textContent = `Хэсэг ${i+1}`; });
+  }
+
+  function setSecImg(idx, url) {
+    document.getElementById(`sec-url-${idx}`).value = url;
+    const btn = document.getElementById(`sec-rm-${idx}`);
+    if (btn) btn.style.display = url ? '' : 'none';
+  }
+  function clearSecImg(idx) {
+    document.getElementById(`sec-url-${idx}`).value = '';
+    const img = document.getElementById(`sec-img-${idx}`); img.src=''; img.style.display='none';
+    const lbl = document.getElementById(`sec-lbl-${idx}`); if(lbl) lbl.textContent='Зураг нэмэх — заавал биш';
+    const btn = document.getElementById(`sec-rm-${idx}`);  if(btn) btn.style.display='none';
+  }
+
+  /* ── Upload ──────────────────────────────────── */
+  function triggerUpload(id) { document.getElementById(id).click(); }
+
+  async function handleUpload(input, previewId, cb, labelId) {
+    const file = input.files[0]; if (!file) return;
+    const lbl = document.getElementById(labelId);
+    if (lbl) lbl.innerHTML = '<span class="spinner spinner-dark"></span> Ачаалж байна…';
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`${BASE}/admin/upload`, { method:'POST', headers: auth(), body: fd });
+      if (!r.ok) throw new Error((await r.json()).detail || 'Алдаа');
+      const { url } = await r.json();
+      const img = document.getElementById(previewId);
+      img.src = `${BASE}${url}`; img.style.display = 'block';
+      cb(url);
+      if (lbl) lbl.textContent = 'Зураг солих';
+    } catch(e) { if (lbl) lbl.textContent = 'Алдаа: ' + e.message; }
+    input.value = '';
+  }
+
+  function setCoverUrl(url) {
+    coverUrl = url;
+    document.getElementById('cover-remove-btn').style.display = url ? '' : 'none';
+  }
+  function clearCoverImg() {
+    coverUrl = '';
+    const img = document.getElementById('cover-preview'); img.src=''; img.style.display='none';
+    document.getElementById('cover-label').textContent = 'Зураг оруулах';
+    document.getElementById('cover-remove-btn').style.display = 'none';
+  }
+
+  /* ── Post ────────────────────────────────────── */
+  async function doPost() {
+    const title = document.getElementById('title').value.trim();
+    clearAlert('post-err');
+    if (!title) { showAlert('post-err', 'Гарчиг оруулна уу.', 'err'); return; }
+
+    const sections = []; let order = 0;
+    for (const block of document.querySelectorAll('.sec-block')) {
+      const idx  = block.id.replace('sec-','');
+      const body = document.getElementById(`sec-body-${idx}`)?.value.trim();
+      if (!body) { showAlert('post-err', 'Бүх хэсгийн агуулгыг оруулна уу.', 'err'); return; }
+      sections.push({
+        subtitle:  document.getElementById(`sec-sub-${idx}`)?.value.trim() || null,
+        body,
+        image_url: document.getElementById(`sec-url-${idx}`)?.value || null,
+        order:     order++,
+      });
+    }
+    if (!sections.length) { showAlert('post-err', 'Дор хаяж нэг хэсэг нэмнэ үү.', 'err'); return; }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Нийтэлж байна…';
+    try {
+      const r = await fetch(`${BASE}/admin/news`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth() },
+        body: JSON.stringify({ title, cover_image_url: coverUrl||null, is_special: isSpecial, sections }),
+      });
+      const data = await r.json();
+      if (!r.ok) { showAlert('post-err', data.detail || 'Алдаа гарлаа.', 'err'); return; }
+
+      showAlert('post-err', 'Мэдээ амжилттай нийтлэгдлээ.', 'ok');
+      resetForm();
+      loadNews();
+    } catch { showAlert('post-err', 'Серверт алдаа гарлаа.', 'err'); }
+    finally { btn.disabled = false; btn.textContent = 'Нийтлэх'; }
+  }
+
+  function resetForm() {
+    document.getElementById('title').value = '';
+    isSpecial = false;
+    document.getElementById('is-special').value = 'false';
+    document.getElementById('special-switch').classList.remove('on');
+    clearCoverImg();
+    sectionCount = 0;
+    document.getElementById('sections-wrap').innerHTML = '';
+    addSection();
+  }
+
+  /* ── List ────────────────────────────────────── */
+  async function loadNews() {
+    try {
+      const items = await (await fetch(`${BASE}/news`)).json();
+      const el = document.getElementById('news-list');
+      const countEl = document.getElementById('list-count');
+      if (!items.length) {
+        countEl.textContent = '0 мэдээ';
+        el.innerHTML = `<div class="empty-state">
+          <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <p>Мэдээ байхгүй байна</p></div>`;
+        return;
+      }
+      countEl.textContent = `${items.length} мэдээ`;
+      el.innerHTML = items.map(n => {
+        const isNew  = Date.now() - new Date(n.created_at+'Z').getTime() < 86400000*2;
+        const thumb  = n.cover_image_url
+          ? `<div class="news-thumb"><img src="${BASE}${n.cover_image_url.startsWith('/')?n.cover_image_url:'/'+n.cover_image_url}" /></div>`
+          : `<div class="news-thumb"><div class="news-thumb-placeholder"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div></div>`;
+        const tags = [
+          n.is_special ? `<span class="tag tag-special">Онцлох</span>` : '',
+          isNew        ? `<span class="tag tag-new">Шинэ</span>`       : '',
+        ].filter(Boolean).join('');
+        return `<div class="news-card${n.is_special?' is-special':''}" id="ni-${n.id}">
+          ${thumb}
+          <div class="news-body">
+            <div>
+              ${tags ? `<div class="news-tags">${tags}</div>` : ''}
+              <div class="news-title">${esc(n.title)}</div>
+              <div class="news-meta">${n.author_name||'—'} &middot; ${fmtDate(n.created_at)} &middot; ${n.sections.length} хэсэг</div>
+            </div>
+          </div>
+          <div class="news-actions">
+            <button class="btn btn-danger btn-sm" onclick="deleteNews(${n.id})">
+              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              Устгах
+            </button>
+          </div>
+        </div>`;
+      }).join('');
+    } catch {}
+  }
+
+  /* ── Delete ──────────────────────────────────── */
+  async function deleteNews(id) {
+    if (!confirm('Энэ мэдээг устгах уу? Энэ үйлдлийг буцаах боломжгүй.')) return;
+    try {
+      const r = await fetch(`${BASE}/admin/news/${id}`, { method:'DELETE', headers: auth() });
+      if (r.ok) {
+        document.getElementById(`ni-${id}`)?.remove();
+        const el = document.getElementById('news-list');
+        if (!el.children.length) {
+          document.getElementById('list-count').textContent = '0 мэдээ';
+          el.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><p>Мэдээ байхгүй байна</p></div>`;
+        } else {
+          const remaining = el.querySelectorAll('.news-card').length;
+          document.getElementById('list-count').textContent = `${remaining} мэдээ`;
+        }
+      } else { const d = await r.json(); alert(d.detail || 'Устгахад алдаа.'); }
+    } catch { alert('Серверт холбогдоход алдаа.'); }
+  }
+
+  /* ── Helpers ─────────────────────────────────── */
+  const auth = () => ({ Authorization: `Bearer ${token}` });
+  const esc  = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtDate = iso => new Date(iso+'Z').toLocaleString('mn-MN',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  function showAlert(id, msg, type) {
+    const el = document.getElementById(id);
+    const txt = document.getElementById(id+'-text');
+    el.className = `alert ${type}`;
+    if (txt) txt.textContent = msg; else el.textContent = msg;
+  }
+  function clearAlert(id) { document.getElementById(id).className = 'alert'; }
+  function show(id) { document.getElementById(id).style.display=''; }
+  function hide(id) { document.getElementById(id).style.display='none'; }
+
+  document.addEventListener('keydown', e => {
+    if (e.key==='Enter' && document.activeElement.tagName!=='TEXTAREA')
+      if (document.getElementById('login-card').style.display!=='none') doLogin();
+  });
+</script>
+</body>
+</html>

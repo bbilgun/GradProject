@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import { Config } from "@/constants/config";
+import { useBookmarks, SavedNewsItem } from "@/contexts/BookmarkContext";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ export default function NewsDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router  = useRouter();
 
+  const { toggleNews, isNewsSaved } = useBookmarks();
   const [news, setNews]     = useState<NewsDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
@@ -108,60 +110,63 @@ export default function NewsDetailScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: BG }}>
-      <StatusBar style={coverUri ? "light" : "dark"} />
+      <StatusBar style="light" />
+
+      {/* ── Back header ──────────────────────────────────── */}
+      <SafeAreaView edges={["top"]} style={{ backgroundColor: BLUE }}>
+        <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 20, flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" }}
+          >
+            <MaterialIcons name="arrow-back" size={18} color={WHITE} />
+          </TouchableOpacity>
+          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 17, color: WHITE, letterSpacing: -0.2, flex: 1 }} numberOfLines={1}>
+            {news?.title ?? "Мэдээ"}
+          </Text>
+          {news && (
+            <TouchableOpacity
+              onPress={() => toggleNews({
+                id: news.id,
+                title: news.title,
+                cover_image_url: news.cover_image_url,
+                is_special: false,
+                content: news.content,
+                sections: news.sections.map(s => ({ body: s.body })),
+                author_name: news.author_name,
+                created_at: news.created_at,
+              })}
+              style={{
+                width: 38, height: 38, borderRadius: 12,
+                backgroundColor: "rgba(255,255,255,0.12)",
+                alignItems: "center", justifyContent: "center",
+              }}
+            >
+              <MaterialIcons
+                name={isNewsSaved(news.id) ? "bookmark" : "bookmark-border"}
+                size={20}
+                color={isNewsSaved(news.id) ? "#FFC20D" : WHITE}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={{ height: 24, backgroundColor: BG, borderTopLeftRadius: 24, borderTopRightRadius: 24 }} />
+      </SafeAreaView>
 
       <ScrollView showsVerticalScrollIndicator={false} bounces>
 
         {/* ── Cover image ──────────────────────────────── */}
-        {coverUri ? (
-          <View style={{ position: "relative" }}>
-            <Image
-              source={{ uri: coverUri }}
-              style={{ width: "100%", height: 280 }}
-              resizeMode="cover"
-            />
-            {/* Dark gradient overlay */}
-            <View
-              style={{
-                position: "absolute", bottom: 0, left: 0, right: 0, height: 120,
-                background: "transparent",
-              }}
-            />
-            {/* Back button on image */}
-            <SafeAreaView edges={["top"]} style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
-              <TouchableOpacity
-                onPress={() => router.back()}
-                style={{
-                  margin: 16, width: 38, height: 38, borderRadius: 12,
-                  backgroundColor: "rgba(0,0,0,0.38)", alignItems: "center", justifyContent: "center",
-                }}
-              >
-                <MaterialIcons name="arrow-back" size={20} color={WHITE} />
-              </TouchableOpacity>
-            </SafeAreaView>
-          </View>
-        ) : (
-          <SafeAreaView edges={["top"]} style={{ backgroundColor: BG }}>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={{
-                margin: 16, flexDirection: "row", alignItems: "center", gap: 6,
-                alignSelf: "flex-start",
-              }}
-            >
-              <MaterialIcons name="arrow-back" size={20} color={BLUE} />
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 14, color: BLUE }}>Буцах</Text>
-            </TouchableOpacity>
-          </SafeAreaView>
+        {coverUri && (
+          <Image source={{ uri: coverUri }} style={{ width: "100%", height: 220 }} resizeMode="cover" />
         )}
 
         {/* ── Article body ─────────────────────────────── */}
         <View
           style={{
             backgroundColor: WHITE,
-            borderTopLeftRadius: coverUri ? 24 : 0,
-            borderTopRightRadius: coverUri ? 24 : 0,
-            marginTop: coverUri ? -20 : 0,
+            borderTopLeftRadius: coverUri ? 20 : 0,
+            borderTopRightRadius: coverUri ? 20 : 0,
+            marginTop: coverUri ? -16 : 0,
             paddingHorizontal: 22,
             paddingTop: 26,
             paddingBottom: 48,
