@@ -12,6 +12,7 @@ const API_BASE =
 
 export const Config = {
   API_BASE,
+  HEALTH:                   `${API_BASE}/health`,
   SEARCH_ENDPOINT:          `${API_BASE}/search`,
   SUMMARIZE_ENDPOINT:       `${API_BASE}/summarize`,
   SYNC_ENDPOINT:            `${API_BASE}/sync-web`,

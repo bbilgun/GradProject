@@ -16,7 +16,7 @@ File layout
         "url":         "https://...",
         "category":    "rule | regulation | order | tuition | pdf",
         "section_id":  "introduction | ...",
-        "source_type": "text_pdf | scanned_pdf | web_page",
+        "source_type": "text_pdf | scanned_pdf | discovered_pdf | web_page",
         "added_at":    "ISO-8601"
       }, ...
     ]
@@ -78,16 +78,23 @@ def register(
     url: str,
     category: str,
     section_id: str = "",
-    source_type: str = "text_pdf",   # "text_pdf" | "scanned_pdf" | "web_page"
+    source_type: str = "text_pdf",   # "text_pdf" | "scanned_pdf" | "discovered_pdf" | "web_page"
 ) -> None:
     """
-    Upsert a resource entry.
-    Silently skips if the URL is already registered.
+    Upsert a resource entry. Existing URLs keep their id/added_at but receive
+    fresher title/category/source metadata.
     """
     data = _load()
-    existing_urls = {r["url"] for r in data["resources"]}
-    if url in existing_urls:
-        return
+    for resource in data["resources"]:
+        if resource.get("url") == url:
+            resource.update({
+                "title":       title.strip() or resource.get("title", ""),
+                "category":    category or resource.get("category", "pdf"),
+                "section_id":  section_id or resource.get("section_id", ""),
+                "source_type": source_type or resource.get("source_type", "text_pdf"),
+            })
+            _save(data)
+            return
 
     data["resources"].append({
         "id":          _resource_id(url),

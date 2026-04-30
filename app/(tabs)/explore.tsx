@@ -101,6 +101,9 @@ const ALL_SECTIONS = HandbookService.getAllSections();
 interface SearchResult {
   section: HandbookSection;
   snippet: string;
+  sourceUrl: string;
+  resultType: string;
+  category: string;
 }
 interface ResourceItem {
   id: string;
@@ -239,12 +242,24 @@ function ContentPane({
           darkColor: "#1E3A5F",
           content: "",
         };
-        return { section, snippet: r.text ?? "" };
+        return {
+          section,
+          snippet: r.text ?? "",
+          sourceUrl: r.source_url ?? "",
+          resultType: r.result_type ?? "semantic",
+          category: r.category ?? "",
+        };
       });
       setResults(mapped);
     } catch {
       const offline = HandbookService.searchLocal(q);
-      setResults(offline.map((s) => ({ section: s, snippet: s.description })));
+      setResults(offline.map((s) => ({
+        section: s,
+        snippet: s.description,
+        sourceUrl: "",
+        resultType: "local",
+        category: "handbook",
+      })));
     } finally {
       setSearching(false);
     }
@@ -289,6 +304,16 @@ function ContentPane({
       pathname: "/handbook/[slug]" as any,
       params: { slug: section.id },
     });
+
+  const openSearchResult = async (result: SearchResult) => {
+    if (result.sourceUrl?.startsWith("http")) {
+      await WebBrowser.openBrowserAsync(result.sourceUrl, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+      });
+      return;
+    }
+    goToChapter(result.section);
+  };
 
   return (
     <>
@@ -384,12 +409,7 @@ function ContentPane({
                 <SearchResultCard
                   key={`${r.section.id}-${idx}`}
                   result={r}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/handbook/[slug]" as any,
-                      params: { slug: r.section.id },
-                    })
-                  }
+                  onPress={() => openSearchResult(r)}
                 />
               ))}
           </ScrollView>
@@ -831,6 +851,18 @@ function SearchResultCard({
   result: SearchResult;
   onPress: () => void;
 }) {
+  const hasExternalSource = result.sourceUrl?.startsWith("http");
+  const badgeLabel = hasExternalSource
+    ? result.sourceUrl.toLowerCase().includes(".pdf")
+      ? "PDF"
+      : "WEB"
+    : "Гарын авлага";
+  const iconName = hasExternalSource
+    ? result.sourceUrl.toLowerCase().includes(".pdf")
+      ? "picture-as-pdf"
+      : "language"
+    : result.section.icon;
+
   return (
     <TouchableOpacity
       activeOpacity={0.7}
@@ -840,7 +872,7 @@ function SearchResultCard({
       <View style={st.resultTop}>
         <View style={st.resultIcon}>
           <MaterialIcons
-            name={result.section.icon as any}
+            name={iconName as any}
             size={18}
             color={BLUE}
           />
@@ -849,9 +881,22 @@ function SearchResultCard({
           <Text style={st.resultTitle} numberOfLines={1}>
             {result.section.title}
           </Text>
-          <Text style={st.resultSub}>{result.section.titleEn}</Text>
+          <View style={st.resultMetaRow}>
+            <View style={st.resultBadge}>
+              <Text style={st.resultBadgeText}>{badgeLabel}</Text>
+            </View>
+            {!!result.category && (
+              <Text style={st.resultSub} numberOfLines={1}>
+                {result.category}
+              </Text>
+            )}
+          </View>
         </View>
-        <MaterialIcons name="chevron-right" size={18} color={MUTED} />
+        <MaterialIcons
+          name={hasExternalSource ? "open-in-new" : "chevron-right"}
+          size={18}
+          color={MUTED}
+        />
       </View>
       {result.snippet ? (
         <Text style={st.resultSnippet} numberOfLines={3}>
@@ -1316,6 +1361,25 @@ const st = StyleSheet.create({
     marginRight: 10,
   },
   resultTitle: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: BLUE },
+  resultMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 3,
+  },
+  resultBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: BLUE + "0A",
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  resultBadgeText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 9,
+    color: BLUE,
+    letterSpacing: 0.5,
+  },
   resultSub: { fontFamily: "Inter_400Regular", fontSize: 11, color: MUTED },
   resultSnippet: {
     fontFamily: "Inter_400Regular",

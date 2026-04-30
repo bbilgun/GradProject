@@ -113,7 +113,6 @@ async def get_current_user(
         raise credentials_exc
     return user
 
-
 # ── Router ────────────────────────────────────────────────────────
 
 router = APIRouter()

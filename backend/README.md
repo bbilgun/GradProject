@@ -11,6 +11,15 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+For scanned PDF OCR support, install the native Tesseract binary as well:
+
+```bash
+brew install tesseract tesseract-lang
+```
+
+The PDF sync uses `PDF_OCR_LANG=mon+eng` by default and falls back to `eng` if
+the Mongolian language pack is unavailable.
+
 ## Run
 
 ```bash

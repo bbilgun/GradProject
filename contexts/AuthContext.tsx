@@ -118,8 +118,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setState({ token: null, user: null, loading: false });
         }
       } catch {
-        // Network error — keep token but no user (will re-auth on next request)
-        setState({ token: savedToken, user: null, loading: false });
+        // If the token cannot be verified, do not keep the app behind the auth gate
+        // with no profile loaded. Send the user back through login.
+        await removeToken();
+        setState({ token: null, user: null, loading: false });
       }
     })();
   }, []);

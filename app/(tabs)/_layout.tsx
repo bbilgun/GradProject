@@ -1,4 +1,5 @@
 import { Tabs, useRouter, usePathname } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Platform, TouchableOpacity, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -13,7 +14,7 @@ export default function TabLayout() {
   const router   = useRouter();
   const insets   = useSafeAreaInsets();
   const pathname = usePathname();
-  const isAIScreen = pathname === '/ai-assistant';
+  const isAIScreen = pathname.includes('ai-assistant');
   // Tab bar height: 49pt content + bottom inset
   const fabBottom = insets.bottom + 49 + 12;
 
@@ -94,7 +95,14 @@ export default function TabLayout() {
         accessibilityLabel="AI Туслах нээх"
         accessibilityRole="button"
       >
-        <MaterialIcons name="auto-awesome" size={26} color="#fff" />
+        <LinearGradient
+          colors={[Palette.primary, '#1F3CFF']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.fabInner}
+        >
+          <MaterialIcons name="auto-awesome" size={26} color="#fff" />
+        </LinearGradient>
       </TouchableOpacity>}
     </View>
   );
@@ -107,13 +115,20 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: Palette.primary,
+    backgroundColor: 'transparent',
+    shadowColor: Palette.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  fabInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
   },
 });

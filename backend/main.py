@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -127,17 +127,27 @@ async def _run_background_sync() -> None:
                 f"processed={pdf_result.processed}, skipped={pdf_result.skipped}, "
                 f"chunks={pdf_result.total_chunks}, errors={len(pdf_result.errors)}"
             )
-            # 2. Web-scraped pages + discovered PDFs
-            web_result = await sync_web(rag, force=False)
-            print(
-                f"[Startup] Web sync — "
-                f"discovered={web_result.pdfs_discovered}, "
-                f"indexed={web_result.pdfs_indexed}, "
-                f"static={web_result.pdfs_static}, "
-                f"tuition_chunks={web_result.tuition_chunks}, "
-                f"errors={len(web_result.errors)}"
-            )
-        for err in pdf_result.errors + web_result.errors:
+            web_result = None
+            if os.getenv("STARTUP_WEB_SYNC", "1").strip().lower() not in {
+                "0",
+                "false",
+                "no",
+                "off",
+            }:
+                # 2. Web-scraped pages + discovered PDFs
+                web_result = await sync_web(rag, force=False)
+                print(
+                    f"[Startup] Web sync — "
+                    f"discovered={web_result.pdfs_discovered}, "
+                    f"indexed={web_result.pdfs_indexed}, "
+                    f"static={web_result.pdfs_static}, "
+                    f"tuition_chunks={web_result.tuition_chunks}, "
+                    f"errors={len(web_result.errors)}"
+                )
+            else:
+                print("[Startup] Web sync skipped (STARTUP_WEB_SYNC=0)")
+        errors = pdf_result.errors + (web_result.errors if web_result else [])
+        for err in errors:
             print(f"[Startup]   ⚠  {err}")
     except Exception as exc:
         print(f"[Startup] Background sync crashed: {exc}")
@@ -210,13 +220,28 @@ class SummarizeRequest(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    role: str   # "user" | "assistant"
+    role: Literal["user", "assistant"]
     content: str
 
 
 class ChatRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=1000)
     history: list[ChatMessage] = Field(default_factory=list)
+
+
+class ChatSource(BaseModel):
+    section_title: str
+    excerpt: str
+    source_url: str = ""
+    category: str = ""
+    score: float = 0
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    sources: list[ChatSource] = Field(default_factory=list)
+    context_used: bool = False
+    fallback: bool = False
 
 
 class SummarizeResponse(BaseModel):
@@ -325,9 +350,17 @@ async def summarize(req: SummarizeRequest):
 
 _SYSTEM_PROMPT = (
     "Та ШУТИС-ийн оюутны AI туслах. "
-    "Гарын авлагын мэдээлэл өгөгдвөл түүнд тулгуурлан хариул. "
+    "Хариултаа үргэлж Монгол хэлээр, товч боловч хэрэгтэй байдлаар өг. "
+    "Гарын авлагын мэдээлэл өгөгдвөл зөвхөн түүнд тулгуурлан хариулж, "
+    "ашигласан хэсгийн нэрийг дурд. "
+    "Хэрэв өгөгдсөн мэдээллээр баттай хариулах боломжгүй бол таамаглахгүй, "
+    "яг ямар мэдээлэл дутуу байгааг хэл. "
+    "ШУТИС вэбээс авсан шинэ мэдээлэл өгөгдвөл URL болон огноог ашиглан "
+    "хариултаа шинэ эх сурвалжтай холбож тайлбарла. "
+    "Алхам, шаардлага, хугацаа, холбоос зэрэг хэрэглэгчид шууд хэрэгтэй "
+    "зүйлсийг эхэнд нь тавь. "
     "Энгийн яриа бол байгалийн байдлаар хариул. "
-    "Хариултаа үргэлж бүрэн дуусга — дундаас таслахгүй. "
+    "Хариултаа бүрэн дуусга, дундаас бүү тасал. "
     "Хэрэв хэрэглэгч сүүлийн мэдээ, яг одоо, өнөөдөр, энэ долоо хоног зэрэг "
     "цаг хугацаатай холбоотой мэдээлэл асуувал search_must_website функцээр "
     "must.edu.mn-ээс шинэ мэдээлэл авч хариул. "
@@ -339,6 +372,29 @@ _SYSTEM_PROMPT = (
 _CASUAL = {
     "сайн", "байна", "уу", "юу", "hello", "hi", "hey", "баярлалаа",
     "thanks", "thank", "ok", "ок", "тийм", "үгүй", "за", "болж",
+}
+
+_CHAT_SECTION_HINTS = {
+    "scholarships": ["тэтгэлэг", "урамшуулал", "санхүүгийн дэмжлэг", "зээл", "сургалтын төлбөр"],
+    "dormitory": ["байр", "дотуур", "оюутны байр", "байрны бүртгэл"],
+    "health-services": ["даатгал", "эрүүл мэнд", "эмнэлэг", "эмч", "шимтгэл"],
+    "credit-system": ["кредит", "хичээл сонголт", "үнэлгээ", "шалгалт", "улирал"],
+    "graduation": ["төгсөлт", "диплом", "хамгаалалт", "turnitin", "хуулбарлалт"],
+    "digital-learning": ["оюутны веб", "unimis", "нууц үг", "апп", "цахим сургалт"],
+    "admission": ["элсэлт", "элсэх", "элсэгч", "бүртгэл", "босго оноо"],
+    "student-life": ["оюутны үнэмлэх", "u-money", "клуб", "оюутны холбоо", "нийтийн тээвэр"],
+    "research": ["номын сан", "эрдэм шинжилгээ", "судалгаа", "олимпиад"],
+}
+
+_WEB_QUERY_HINTS = {
+    "сүүлийн", "шинэ", "мэдээ", "өнөөдөр", "өчигдөр", "маргааш", "энэ долоо хоног",
+    "одоогоор", "яг одоо", "2026", "2025", "latest", "recent", "today", "news",
+    "must.edu.mn", "зарлал", "event", "announcement",
+}
+
+_ANSWER_STOPWORDS = _CASUAL | {
+    "хэрхэн", "яаж", "ямар", "хэзээ", "хаана", "авах", "өгөх", "болох", "тухай",
+    "please", "tell", "me", "about",
 }
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -364,6 +420,191 @@ def _truncate(text: str, max_chars: int = 400) -> str:
     return text[:max_chars] + "…" if len(text) > max_chars else text
 
 
+def _query_tokens(query: str) -> set[str]:
+    return {
+        token
+        for token in re.sub(r"[^\w\sА-Яа-яӨөҮүЁё]", " ", query.lower()).split()
+        if len(token) > 1 and token not in _ANSWER_STOPWORDS
+    }
+
+
+def _expanded_query(query: str) -> str:
+    query_l = query.lower()
+    expansions: list[str] = []
+    for section_id, keywords in _CHAT_SECTION_HINTS.items():
+        if any(keyword in query_l for keyword in keywords):
+            expansions.append(section_id)
+            expansions.extend(keywords[:4])
+    if not expansions:
+        return query
+    return f"{query} {' '.join(dict.fromkeys(expansions))}"
+
+
+def _needs_web_context(query: str) -> bool:
+    query_l = query.lower()
+    return any(hint in query_l for hint in _WEB_QUERY_HINTS)
+
+
+def _section_hint_score(query: str, result) -> float:
+    query_l = query.lower()
+    title_l = result.section_title.lower()
+    text_l = result.text.lower()
+    score = 0.0
+
+    for section_id, keywords in _CHAT_SECTION_HINTS.items():
+        matched_keywords = [kw for kw in keywords if kw in query_l]
+        if not matched_keywords:
+            continue
+
+        if result.section_id == section_id:
+            score += 3.0
+        if any(kw in title_l for kw in matched_keywords):
+            score += 2.0
+        if any(kw in text_l for kw in matched_keywords):
+            score += 0.5
+
+    return score
+
+
+def _collect_chat_context(query: str) -> tuple[str, list[ChatSource]]:
+    """Return a compact RAG context block plus source metadata for the UI."""
+    if _is_casual(query) or not rag or not rag._ready or len(rag.chunks) == 0:
+        return "", []
+
+    try:
+        raw = rag.search(_expanded_query(query), top_k=10)
+    except Exception as exc:
+        print(f"[Chat] RAG search failed: {exc}")
+        return "", []
+
+    if not raw:
+        return "", []
+
+    raw = sorted(
+        raw,
+        key=lambda r: (_section_hint_score(query, r), r.score),
+        reverse=True,
+    )[:5]
+
+    sources = [
+        ChatSource(
+            section_title=r.section_title,
+            excerpt=_truncate(r.text.strip(), 220),
+            source_url=r.source_url,
+            category=r.category,
+            score=float(r.score),
+        )
+        for r in raw
+    ]
+    snippets = "\n---\n".join(
+        f"[{idx}. {r.section_title}]\n{_truncate(r.text.strip(), 550)}"
+        for idx, r in enumerate(raw, start=1)
+    )
+    return f"\n\nГарын авлагын мэдээлэл:\n{snippets}", sources
+
+
+def _relevant_excerpt(query: str, text: str, max_chars: int = 360) -> str:
+    tokens = _query_tokens(query)
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?。])\s+|[•\n]+", text)
+        if sentence.strip()
+    ]
+    ranked = sorted(
+        sentences,
+        key=lambda sentence: len(tokens & _query_tokens(sentence)),
+        reverse=True,
+    )
+    useful = [sentence for sentence in ranked if tokens & _query_tokens(sentence)]
+    selected = useful[:2] or sentences[:2] or [text]
+    return _truncate(" ".join(selected), max_chars)
+
+
+def _fallback_reply_from_sources(query: str, sources: list[ChatSource]) -> str:
+    """Give a useful handbook-based answer when the LLM is unavailable."""
+    if not sources:
+        return (
+            "AI үйлчилгээ түр саатлаа. Сервер ажиллаж байгаа ч хариу боловсруулах "
+            "үйлчилгээ одоогоор хариу өгөхгүй байна. Дахин оролдоно уу."
+        )
+
+    blocks = "\n\n".join(
+        f"**{source.section_title}**\n{_relevant_excerpt(query, source.excerpt)}"
+        for source in sources[:3]
+    )
+    return (
+        "AI үйлчилгээ түр саатсан тул гарын авлагаас олдсон хамгийн холбоотой "
+        f"мэдээллийг харуулж байна:\n\n{blocks}\n\n"
+        "Илүү нарийн хариу авахын тулд асуултаа тодруулж бичвэл хайлтыг дахин хийж болно."
+    )
+
+
+def _sources_from_web_context(web_context: str) -> list[ChatSource]:
+    sources: list[ChatSource] = []
+    current_title = "must.edu.mn"
+    current_url = ""
+    excerpt_lines: list[str] = []
+
+    def is_noise(line: str) -> bool:
+        line_l = re.sub(r"\s+", " ", line.lower()).strip()
+        compact = re.sub(r"\s+", "", line_l)
+        return (
+            line_l in {"мэдээ", "зарлал", "холбоо барих", "ажлын байр"}
+            or "science fm" in line_l
+            or "холбоо барих" in line_l
+            or "холбообарих" in compact
+            or "элсэгч холбоо барих" in line_l
+        )
+
+    def flush() -> None:
+        if current_url:
+            excerpt = " ".join(line for line in excerpt_lines if not is_noise(line)).strip()
+            sources.append(ChatSource(
+                section_title=current_title,
+                excerpt=_truncate(excerpt or current_title, 220),
+                source_url=current_url,
+                category="web",
+                score=1.0,
+            ))
+
+    for line in web_context.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("## "):
+            flush()
+            current_title = stripped.lstrip("# ").strip() or "must.edu.mn"
+            current_url = ""
+            excerpt_lines = []
+        elif stripped.startswith("URL:"):
+            current_url = stripped.replace("URL:", "", 1).strip()
+        elif current_url and not stripped.startswith("- ") and not is_noise(stripped):
+            excerpt_lines.append(stripped)
+    flush()
+
+    deduped: list[ChatSource] = []
+    seen: set[str] = set()
+    for source in sources:
+        if source.source_url in seen:
+            continue
+        seen.add(source.source_url)
+        deduped.append(source)
+    return deduped[:4]
+
+
+def _fallback_reply_from_web(query: str, web_context: str) -> str:
+    lines = [
+        line.strip()
+        for line in web_context.splitlines()
+        if line.strip() and not line.startswith("URL:") and not line.startswith("## Холбоотой")
+    ]
+    body = _relevant_excerpt(query, "\n".join(lines), max_chars=900)
+    return (
+        "AI үйлчилгээ түр саатсан тул must.edu.mn-ээс олдсон шинэ мэдээллийг "
+        f"товч харуулж байна:\n\n{body}"
+    )
+
+
 # ── Gemini function-calling tool definitions ─────────────────────
 
 def _build_gemini_tools():
@@ -373,9 +614,10 @@ def _build_gemini_tools():
     search_fn = types.FunctionDeclaration(
         name="search_must_website",
         description=(
-            "ШУТИС-ийн вэб сайтаас (must.edu.mn) шинэ мэдээ, мэдээлэл хайх. "
-            "Сүүлийн мэдээ, өнөөдрийн мэдээ, энэ долоо хоногийн зэрэг "
-            "цаг хугацаатай холбоотой асуултад ашиглана."
+            "ШУТИС-ийн вэб сайтаас (must.edu.mn) мэдээ, зарлал, дүрэм, журам, "
+            "тушаал болон сургалтын төлбөрийн хуудсуудыг хайх. Сүүлийн мэдээ, "
+            "өнөөдрийн мэдээлэл, энэ долоо хоног, тодорхой зарлал, эсвэл "
+            "гарын авлагад байхгүй шинэ мэдээлэл асуусан үед ашиглана."
         ),
         parameters=types.Schema(
             type="OBJECT",
@@ -423,7 +665,7 @@ async def _execute_tool_call(name: str, args: dict) -> str:
         return f"Unknown function: {name}"
 
 
-@app.post("/chat")
+@app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """
     Conversational AI endpoint powered by Gemini 2.5 Flash with
@@ -442,19 +684,21 @@ async def chat(req: ChatRequest):
             detail="GEMINI_API_KEY тохируулаагүй байна.",
         )
 
-    # ── 1. RAG context (skip for casual messages) ──────────────
-    context_block = ""
-    if not _is_casual(req.query) and rag and rag._ready and len(rag.chunks) > 0:
+    # ── 1. RAG + live web context ───────────────────────────────
+    context_block, sources = _collect_chat_context(req.query)
+    web_block = ""
+    web_sources: list[ChatSource] = []
+
+    if _needs_web_context(req.query):
         try:
-            raw = rag.search(req.query, top_k=3)
-            if raw:
-                snippets = "\n---\n".join(
-                    f"[{r.section_title}]\n{_truncate(r.text)}"
-                    for r in raw
-                )
-                context_block = f"\n\nГарын авлагын мэдээлэл:\n{snippets}"
-        except Exception:
-            pass
+            from web_search import search_must_website
+
+            web_context = await search_must_website(req.query)
+            if web_context.strip():
+                web_block = f"\n\nШУТИС вэбээс авсан шинэ мэдээлэл:\n{_truncate(web_context, 4500)}"
+                web_sources = _sources_from_web_context(web_context)
+        except Exception as exc:
+            print(f"[Chat] Web context fetch failed: {exc}")
 
     # ── 2. Build Gemini conversation history (last 6 turns) ────
     gemini_history = []
@@ -467,6 +711,8 @@ async def chat(req: ChatRequest):
     user_content = req.query
     if context_block:
         user_content += context_block
+    if web_block:
+        user_content += web_block
 
     # ── 3. Call Gemini with function-calling tools ─────────────
     from google.genai import types
@@ -541,10 +787,28 @@ async def chat(req: ChatRequest):
             )
 
         reply = response.text
-        return {"reply": reply or "Хариу авахад алдаа гарлаа."}
+        return ChatResponse(
+            reply=reply or "Хариу авахад алдаа гарлаа.",
+            sources=(web_sources + sources)[:6],
+            context_used=bool(context_block or web_block),
+        )
 
     except Exception as exc:
         err = str(exc)
+        if web_block:
+            return ChatResponse(
+                reply=_fallback_reply_from_web(req.query, web_block),
+                sources=(web_sources + sources)[:6],
+                context_used=True,
+                fallback=True,
+            )
+        if sources:
+            return ChatResponse(
+                reply=_fallback_reply_from_sources(req.query, sources),
+                sources=sources,
+                context_used=True,
+                fallback=True,
+            )
         if "429" in err or "quota" in err.lower() or "ResourceExhausted" in err:
             raise HTTPException(status_code=429, detail="API хүсэлтийн лимит хэтэрлээ. Түр хүлээгээд дахин оролдоно уу.")
         raise HTTPException(status_code=502, detail=f"AI үйлчилгээнд алдаа гарлаа. Дахин оролдоно уу.")

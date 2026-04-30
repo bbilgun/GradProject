@@ -10,6 +10,7 @@ import {
   Platform,
   Animated,
   Easing,
+  Linking,
   StatusBar,
   Keyboard,
   StyleSheet,
@@ -18,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import Markdown from 'react-native-markdown-display';
 
 import { Config } from '@/constants/config';
 import { EaseOutExpo } from '@/constants/Theme';
@@ -39,8 +41,22 @@ interface Message {
   role: 'user' | 'assistant';
   text: string;
   loading?: boolean;
+  error?: boolean;
+  fallback?: boolean;
+  retryQuery?: string;
+  sources?: ChatSource[];
   timestamp: Date;
 }
+
+interface ChatSource {
+  section_title: string;
+  excerpt: string;
+  source_url?: string;
+  category?: string;
+  score?: number;
+}
+
+type ConnectionState = 'checking' | 'online' | 'offline';
 
 const CATEGORIES = [
   { icon: 'search',    label: 'Хайлт',     color: '#6C4EF6', bg: '#F0EDFF' },
@@ -57,6 +73,27 @@ const PROMPTS: { icon: string; text: string; color: string; category: string }[]
   { icon: 'local-hospital', text: 'Эрүүл мэндийн даатгалаа хэрхэн төлөх?', color: '#6A1B9A', category: 'Даатгал' },
 ];
 
+function getChatErrorMessage(error: any) {
+  if (error?.name === 'AbortError') {
+    return 'Хүсэлт хугацаа хэтэрсэн. Дахин оролдоно уу.';
+  }
+
+  const message = String(error?.message ?? '');
+  if (message.includes('GEMINI_API_KEY') || message.startsWith('503:')) {
+    return 'AI API түлхүүр тохируулаагүй байна.';
+  }
+  if (message.startsWith('429:') || message.toLowerCase().includes('quota')) {
+    return 'AI хүсэлтийн лимит хэтэрлээ. Түр хүлээгээд дахин оролдоно уу.';
+  }
+  if (message.startsWith('502:') || message.includes('AI үйлчилгээнд алдаа')) {
+    return 'AI үйлчилгээ түр саатлаа. Дахин оролдоно уу.';
+  }
+  if (message.includes('Network request failed') || message.includes('Failed to fetch')) {
+    return 'Сервертэй холбогдож чадсангүй. Backend асаалттай эсэхийг шалгаад дахин оролдоно уу.';
+  }
+  return message || 'Серверт холбогдоход алдаа гарлаа. Дахин оролдоно уу.';
+}
+
 // ─── Screen ───────────────────────────────────────────────────────
 
 export default function AIAssistantScreen() {
@@ -70,9 +107,29 @@ export default function AIAssistantScreen() {
   const [input, setInput]       = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [thinking, setThinking] = useState(false);
+  const [connection, setConnection] = useState<ConnectionState>('checking');
 
   // Pending query ref: when set, the next render triggers sendChat via useEffect
   const pendingQuery = useRef<string | null>(null);
+
+  const checkHealth = useCallback(async () => {
+    setConnection('checking');
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(Config.HEALTH, { signal: controller.signal })
+        .finally(() => clearTimeout(timer));
+      setConnection(res.ok ? 'online' : 'offline');
+      return res.ok;
+    } catch {
+      setConnection('offline');
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    checkHealth();
+  }, [checkHealth]);
 
   // ── Deep-link: summarise a handbook section ───────────────────
   useEffect(() => {
@@ -120,7 +177,7 @@ export default function AIAssistantScreen() {
     ]);
 
     const history = currentMessages
-      .filter(m => !m.loading)
+      .filter(m => !m.loading && !m.error)
       .map(m => ({ role: m.role, content: m.text }));
 
     try {
@@ -132,28 +189,39 @@ export default function AIAssistantScreen() {
         body: JSON.stringify({ query, history }),
         signal: controller.signal,
       }).finally(() => clearTimeout(timer));
+      setConnection('online');
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail ?? `HTTP ${res.status}`);
+        throw new Error(`${res.status}:${err.detail ?? `HTTP ${res.status}`}`);
       }
 
       const data = await res.json();
       setMessages(prev =>
         prev.map(m =>
           m.id === loadingId
-            ? { ...m, text: data.reply ?? 'Хариу авахад алдаа гарлаа.', loading: false }
+            ? {
+                ...m,
+                text: data.reply ?? 'Хариу авахад алдаа гарлаа.',
+                loading: false,
+                fallback: Boolean(data.fallback),
+                sources: Array.isArray(data.sources) ? data.sources : [],
+              }
             : m,
         ),
       );
     } catch (e: any) {
-      const msg = e?.name === 'AbortError'
-        ? 'Хүсэлт хугацаа хэтэрсэн. Дахин оролдоно уу.'
-        : e?.message?.includes('GEMINI_API_KEY')
-          ? 'API түлхүүр тохируулаагүй байна.'
-          : 'Серверт холбогдоход алдаа гарлаа. Дахин оролдоно уу.';
+      const errorText = String(e?.message ?? '');
+      if (errorText.includes('Network request failed') || errorText.includes('Failed to fetch')) {
+        setConnection('offline');
+      }
+      const msg = getChatErrorMessage(e);
       setMessages(prev =>
-        prev.map(m => (m.id === loadingId ? { ...m, text: msg, loading: false } : m)),
+        prev.map(m =>
+          m.id === loadingId
+            ? { ...m, text: msg, loading: false, error: true, retryQuery: query }
+            : m,
+        ),
       );
     } finally {
       setThinking(false);
@@ -186,10 +254,28 @@ export default function AIAssistantScreen() {
     setMessages(prev => [...prev, userMsg]);
   }, [thinking]);
 
+  const handleRetry = useCallback((query: string) => {
+    if (thinking) return;
+    pendingQuery.current = query;
+    setMessages(prev => prev.filter(m => !(m.error && m.retryQuery === query)));
+  }, [thinking]);
+
   const handleClear = () => setMessages([]);
 
   const canSend = input.trim().length > 0 && !thinking;
   const isChat  = messages.length > 0;
+  const statusText =
+    connection === 'online'
+      ? 'ШУТИС гарын авлага холбогдсон'
+      : connection === 'checking'
+        ? 'Сервер шалгаж байна'
+        : 'Сервер холбогдоогүй';
+  const statusColor =
+    connection === 'online'
+      ? '#4ADE80'
+      : connection === 'checking'
+        ? GOLD
+        : '#F87171';
 
   // Bottom padding: account for the absolutely-positioned tab bar (49pt) + safe area
   const bottomInset = insets.bottom + 49;
@@ -226,8 +312,8 @@ export default function AIAssistantScreen() {
                 </View>
               </View>
               <View style={s.statusRow}>
-                <View style={s.statusDot} />
-                <Text style={s.statusText}>ШУТИС гарын авлага холбогдсон</Text>
+                <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+                <Text style={s.statusText}>{statusText}</Text>
               </View>
             </View>
 
@@ -267,7 +353,7 @@ export default function AIAssistantScreen() {
           keyboardDismissMode="interactive"
         >
           {isChat
-            ? messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)
+            ? messages.map(msg => <MessageBubble key={msg.id} msg={msg} onRetry={handleRetry} />)
             : <WelcomeView onPrompt={handlePrompt} />}
         </ScrollView>
 
@@ -360,7 +446,7 @@ function SendButton({ canSend, thinking, onPress }: { canSend: boolean; thinking
 
 // ─── Message bubble ───────────────────────────────────────────────
 
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({ msg, onRetry }: { msg: Message; onRetry: (query: string) => void }) {
   const op = useRef(new Animated.Value(0)).current;
   const y  = useRef(new Animated.Value(10)).current;
 
@@ -387,16 +473,63 @@ function MessageBubble({ msg }: { msg: Message }) {
   return (
     <Animated.View style={[s.assistantRow, { opacity: op, transform: [{ translateY: y }] }]}>
       <View style={s.assistantLabel}>
-        <View style={s.aiIcon}>
-          <MaterialIcons name="auto-awesome" size={12} color={GOLD} />
+        <View style={[s.aiIcon, msg.error && s.aiIconError]}>
+          <MaterialIcons
+            name={msg.error ? 'error-outline' : msg.fallback ? 'info-outline' : 'auto-awesome'}
+            size={12}
+            color={msg.error ? '#EF4444' : GOLD}
+          />
         </View>
-        <Text style={s.aiName}>AI Туслах</Text>
+        <Text style={[s.aiName, msg.error && s.aiNameError]}>
+          {msg.error ? 'Алдаа' : msg.fallback ? 'Гарын авлага' : 'AI Туслах'}
+        </Text>
         <Text style={s.timeLeft}>{timeStr}</Text>
       </View>
-      <View style={s.assistantBubble}>
-        {msg.loading ? <TypingDots /> : <Text style={s.msgText}>{msg.text}</Text>}
+      <View style={[s.assistantBubble, msg.error && s.errorBubble]}>
+        {msg.loading ? (
+          <TypingDots />
+        ) : (
+          <>
+            <Markdown style={markdownStyles}>{msg.text}</Markdown>
+            {msg.error && msg.retryQuery && (
+              <TouchableOpacity style={s.retryBtn} onPress={() => onRetry(msg.retryQuery!)}>
+                <MaterialIcons name="refresh" size={15} color={BLUE} />
+                <Text style={s.retryText}>Дахин оролдох</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
       </View>
+      {!msg.loading && !msg.error && msg.sources && msg.sources.length > 0 && (
+        <SourceList sources={msg.sources} />
+      )}
     </Animated.View>
+  );
+}
+
+function SourceList({ sources }: { sources: ChatSource[] }) {
+  const visibleSources = sources.slice(0, 3);
+
+  return (
+    <View style={s.sourcesWrap}>
+      {visibleSources.map((source, index) => {
+        const url = source.source_url?.startsWith('http') ? source.source_url : undefined;
+        const canOpen = Boolean(url);
+        return (
+          <TouchableOpacity
+            key={`${source.section_title}-${index}`}
+            disabled={!canOpen}
+            onPress={() => url && Linking.openURL(url)}
+            style={s.sourceChip}
+          >
+            <MaterialIcons name={canOpen ? 'open-in-new' : 'article'} size={12} color={BLUE} />
+            <Text style={s.sourceText} numberOfLines={1}>
+              {source.section_title}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
 }
 
@@ -765,10 +898,16 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  aiIconError: {
+    backgroundColor: '#FEE2E2',
+  },
   aiName: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 12,
     color: BLUE,
+  },
+  aiNameError: {
+    color: '#B91C1C',
   },
   timeLeft: {
     fontFamily: 'Inter_400Regular',
@@ -786,6 +925,51 @@ const s = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 2,
+  },
+  errorBubble: {
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    shadowOpacity: 0.03,
+  },
+  retryBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
+    backgroundColor: BLUE + '0D',
+  },
+  retryText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    color: BLUE,
+  },
+  sourcesWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+    paddingLeft: 2,
+  },
+  sourceChip: {
+    maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: BLUE + '0D',
+  },
+  sourceText: {
+    maxWidth: 220,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 11,
+    color: BLUE,
   },
 
   // Typing dots
@@ -916,5 +1100,31 @@ const s = StyleSheet.create({
     fontSize: 13,
     color: BODY,
     lineHeight: 19,
+  },
+});
+
+const markdownStyles = StyleSheet.create({
+  body: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
+    color: BODY,
+    lineHeight: 22,
+  },
+  paragraph: {
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  bullet_list: {
+    marginBottom: 6,
+  },
+  ordered_list: {
+    marginBottom: 6,
+  },
+  list_item: {
+    marginBottom: 4,
+  },
+  strong: {
+    fontFamily: 'Inter_700Bold',
+    color: BODY,
   },
 });

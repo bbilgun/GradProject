@@ -76,6 +76,8 @@ export default function HomeScreen() {
   const { bookmarks, isBookmarked, savedNews } = useBookmarks();
 
   const [news, setNews]             = useState<NewsItem[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [newsError, setNewsError]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const heroOp = useRef(new Animated.Value(0)).current;
@@ -84,12 +86,20 @@ export default function HomeScreen() {
   const bodyY  = useRef(new Animated.Value(24)).current;
 
   const fetchNews = useCallback(async () => {
+    setNewsLoading(true);
+    setNewsError(false);
     try {
       const r = await fetch(Config.NEWS);
+      if (!r.ok) throw new Error(`News request failed: ${r.status}`);
       const d: NewsItem[] = await r.json();
-      setNews(d.slice(0, 5));
-    } catch {}
-    setRefreshing(false);
+      setNews(Array.isArray(d) ? d.slice(0, 5) : []);
+      setNewsError(false);
+    } catch {
+      setNewsError(true);
+    } finally {
+      setNewsLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -229,7 +239,7 @@ export default function HomeScreen() {
           {user && <StatsStrip user={user} onPress={() => router.push("/(tabs)/profile" as any)} />}
 
           {/* ── Recent news ─────────────────────────────────────── */}
-          {news.length > 0 && (
+          {news.length > 0 ? (
             <>
               <SectionHeader
                 title="Сүүлийн мэдээ"
@@ -251,7 +261,35 @@ export default function HomeScreen() {
                 ))}
               </ScrollView>
             </>
-          )}
+          ) : newsLoading ? (
+            <>
+              <SectionHeader
+                title="Сүүлийн мэдээ"
+                action={{ label: "Бүгд", onPress: () => router.push("/(tabs)/news" as any) }}
+              />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.hScrollContent}
+                style={s.hScroll}
+              >
+                {[0, 1, 2].map((item) => (
+                  <View key={item} style={s.newsSkeletonCard}>
+                    <View style={s.newsSkeletonTitle} />
+                    <View style={s.newsSkeletonLine} />
+                  </View>
+                ))}
+              </ScrollView>
+            </>
+          ) : newsError ? (
+            <>
+              <SectionHeader
+                title="Сүүлийн мэдээ"
+                action={{ label: "Бүгд", onPress: () => router.push("/(tabs)/news" as any) }}
+              />
+              <NewsInlineState onRetry={fetchNews} />
+            </>
+          ) : null}
 
           {/* ── Bookmarks / featured chapters ──────────────────── */}
           <SectionHeader
@@ -300,6 +338,23 @@ function SectionHeader({ title, action }: { title: string; action?: { label: str
           <MaterialIcons name="arrow-forward" size={13} color={BLUE} />
         </TouchableOpacity>
       )}
+    </View>
+  );
+}
+
+function NewsInlineState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={s.newsStateCard}>
+      <View style={s.newsStateIcon}>
+        <MaterialIcons name="cloud-off" size={20} color={BLUE} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={s.newsStateTitle}>Мэдээ түр ачаалсангүй</Text>
+        <Text style={s.newsStateText}>Интернэт эсвэл серверийн холболтоо шалгаад дахин оролдоно уу.</Text>
+      </View>
+      <TouchableOpacity onPress={onRetry} style={s.newsRetryBtn} activeOpacity={0.8}>
+        <MaterialIcons name="refresh" size={16} color={BLUE} />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -633,6 +688,75 @@ const s = StyleSheet.create({
   },
   newsTimePill: { flexDirection: "row", alignItems: "center", gap: 4 },
   newsTime: { fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.7)" },
+  newsSkeletonCard: {
+    width: 200,
+    height: 140,
+    borderRadius: 18,
+    backgroundColor: WHITE,
+    padding: 14,
+    justifyContent: "flex-end",
+    shadowColor: "rgba(8,21,143,0.08)",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  newsSkeletonTitle: {
+    width: "82%",
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "rgba(8,21,143,0.08)",
+    marginBottom: 8,
+  },
+  newsSkeletonLine: {
+    width: "48%",
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "rgba(8,21,143,0.06)",
+  },
+  newsStateCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: WHITE,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(8,21,143,0.07)",
+    shadowColor: "rgba(8,21,143,0.08)",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  newsStateIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(8,21,143,0.07)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  newsStateTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+    color: BODY,
+    marginBottom: 2,
+  },
+  newsStateText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    lineHeight: 16,
+    color: MUTED,
+  },
+  newsRetryBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: "rgba(8,21,143,0.07)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   // Chapter card
   chapterWrap: { width: 140 },

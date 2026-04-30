@@ -6,6 +6,7 @@ Features
 --------
 - Async download via httpx (30 s timeout, redirect follow)
 - Text extraction via pdfplumber (handles Mongolian Cyrillic well)
+- OCR fallback for scanned PDFs via PyMuPDF + Tesseract when no text layer exists
 - Recursive character text splitter (paragraph → line → sentence → word → char)
 - SHA-256 hash cache (pdf_cache.json) — skips unchanged PDFs
 - Thread-safe: the FAISS mutation is serialised by the caller's asyncio.Lock
@@ -15,16 +16,28 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib.util
 import json
 import os
 import re
+import shutil
+import subprocess
 import tempfile
 from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
 import pdfplumber
+
+from chunk_cache import (
+    get_cached_chunks,
+    load_chunk_cache,
+    put_cached_chunks,
+    rag_has_source,
+    save_chunk_cache,
+)
 
 if TYPE_CHECKING:
     from rag_service import RAGService
@@ -99,6 +112,78 @@ PDF_SOURCES: list[PDFSource] = [
 # ─────────────────────────────────────────────────────────────────
 
 _CACHE_FILE = Path(__file__).parent / "pdf_cache.json"
+_CHUNK_CACHE_FILE = Path(__file__).parent / "pdf_chunk_cache.json"
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+_OCR_ENABLED = os.getenv("PDF_OCR_ENABLED", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
+_OCR_LANG = os.getenv("PDF_OCR_LANG", "mon+eng")
+_OCR_FALLBACK_LANG = os.getenv("PDF_OCR_FALLBACK_LANG", "eng")
+_OCR_DPI = _env_int("PDF_OCR_DPI", 200)
+_OCR_MAX_PAGES = _env_int("PDF_OCR_MAX_PAGES", 80)
+_MIN_TEXT_LAYER_CHARS = _env_int("PDF_MIN_TEXT_LAYER_CHARS", 120)
+
+
+def _installed_tesseract_lang_signature() -> str:
+    if shutil.which("tesseract") is None:
+        return "no-tesseract"
+
+    try:
+        proc = subprocess.run(
+            ["tesseract", "--list-langs"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except Exception:
+        return "langs-unknown"
+
+    installed = {
+        line.strip()
+        for line in (proc.stdout + "\n" + proc.stderr).splitlines()
+        if line.strip() and "List of available languages" not in line
+    }
+    requested = {
+        part
+        for part in re.split(r"[+,\s]+", f"{_OCR_LANG}+{_OCR_FALLBACK_LANG}")
+        if part
+    }
+    available_requested = sorted(installed & requested)
+    return ",".join(available_requested) or "no-requested-langs"
+
+
+def _ocr_dependency_signature() -> str:
+    if not _OCR_ENABLED:
+        return "text-only"
+
+    missing = []
+    if shutil.which("tesseract") is None:
+        missing.append("tesseract")
+    for module_name in ("fitz", "pytesseract", "PIL"):
+        if importlib.util.find_spec(module_name) is None:
+            missing.append(module_name)
+
+    dependency_state = "ready" if not missing else "missing-" + "-".join(missing)
+    lang_state = _installed_tesseract_lang_signature()
+    return (
+        f"ocr-{dependency_state}-lang-{lang_state}-"
+        f"dpi-{_OCR_DPI}-pages-{_OCR_MAX_PAGES}-min-{_MIN_TEXT_LAYER_CHARS}"
+    )
+
+
+PDF_CHUNK_CACHE_VERSION = f"pdf-v2-{_ocr_dependency_signature()}"
 
 
 def _load_cache() -> dict[str, str]:
@@ -129,6 +214,24 @@ def extract_text(pdf_bytes: bytes) -> str:  # public alias used by web_scraper
 
 
 def _extract_text(pdf_bytes: bytes) -> str:
+    """Extract searchable text, falling back to OCR for scanned PDFs."""
+    try:
+        text = _extract_text_layer(pdf_bytes)
+    except Exception as exc:
+        print(f"[PDF Extract] Text-layer extraction failed; trying OCR fallback: {exc}")
+        text = ""
+
+    if _has_meaningful_text(text):
+        return text
+
+    ocr_text = _extract_text_with_ocr(pdf_bytes)
+    if ocr_text:
+        return ocr_text
+
+    return text
+
+
+def _extract_text_layer(pdf_bytes: bytes) -> str:
     """
     Write bytes to a temp file, open with pdfplumber, extract all pages.
     pdfplumber handles Mongolian Cyrillic better than raw PyMuPDF for
@@ -152,6 +255,94 @@ def _extract_text(pdf_bytes: bytes) -> str:
     return _clean_text("\n\n".join(pages))
 
 
+def _has_meaningful_text(text: str) -> bool:
+    """Ignore page-number-only extraction from scanned PDFs."""
+    useful_chars = re.findall(r"[0-9A-Za-zА-Яа-яЁёӨөҮү]", text or "")
+    return len(useful_chars) >= _MIN_TEXT_LAYER_CHARS
+
+
+def _extract_text_with_ocr(pdf_bytes: bytes) -> str:
+    """
+    Render scanned PDF pages and run Tesseract OCR.
+
+    The dependencies are optional so deployments without OCR support keep the
+    previous behaviour: scanned PDFs are registered as static resources.
+    """
+    if not _OCR_ENABLED:
+        return ""
+
+    if shutil.which("tesseract") is None:
+        print("[PDF OCR] Tesseract binary not found; skipping OCR fallback")
+        return ""
+
+    try:
+        import fitz  # PyMuPDF  # noqa: PLC0415
+        import pytesseract  # noqa: PLC0415
+        from PIL import Image, ImageOps  # noqa: PLC0415
+    except Exception as exc:
+        print(f"[PDF OCR] Optional OCR dependency missing; skipping OCR fallback: {exc}")
+        return ""
+
+    pages: list[str] = []
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(pdf_bytes)
+        tmp_path = tmp.name
+
+    try:
+        with fitz.open(tmp_path) as doc:
+            page_limit = min(len(doc), max(_OCR_MAX_PAGES, 0))
+            zoom = max(_OCR_DPI, 72) / 72
+            matrix = fitz.Matrix(zoom, zoom)
+
+            for page_index in range(page_limit):
+                page = doc.load_page(page_index)
+                pix = page.get_pixmap(matrix=matrix, alpha=False)
+                image = Image.open(BytesIO(pix.tobytes("png")))
+                image.load()
+                image = ImageOps.grayscale(image)
+                image = ImageOps.autocontrast(image)
+
+                page_text = _ocr_image_to_text(pytesseract, image, page_index + 1)
+                if page_text:
+                    pages.append(page_text)
+    except Exception as exc:
+        print(f"[PDF OCR] OCR fallback failed: {exc}")
+        return ""
+    finally:
+        os.unlink(tmp_path)
+
+    text = _clean_text("\n\n".join(pages))
+    if text:
+        print(f"[PDF OCR] Extracted {len(text)} chars from scanned PDF")
+    return text
+
+
+def _ocr_image_to_text(pytesseract, image, page_number: int) -> str:
+    config = "--oem 3 --psm 6"
+
+    try:
+        return pytesseract.image_to_string(image, lang=_OCR_LANG, config=config).strip()
+    except pytesseract.TesseractError as exc:
+        if _OCR_FALLBACK_LANG and _OCR_FALLBACK_LANG != _OCR_LANG:
+            try:
+                print(
+                    f"[PDF OCR] Language '{_OCR_LANG}' failed on page {page_number}; "
+                    f"falling back to '{_OCR_FALLBACK_LANG}'"
+                )
+                return pytesseract.image_to_string(
+                    image,
+                    lang=_OCR_FALLBACK_LANG,
+                    config=config,
+                ).strip()
+            except pytesseract.TesseractError as fallback_exc:
+                print(f"[PDF OCR] Tesseract failed on page {page_number}: {fallback_exc}")
+                return ""
+
+        print(f"[PDF OCR] Tesseract failed on page {page_number}: {exc}")
+        return ""
+
+
 def _clean_text(text: str) -> str:
     """Normalise raw PDF text: fix hyphenation, blank lines, spacing."""
     # Re-join hyphenated line-breaks: "тэтгэ-\nлэг" → "тэтгэлэг"
@@ -171,8 +362,8 @@ def _clean_text(text: str) -> str:
 
 def _recursive_char_split(
     text: str,
-    chunk_size: int = 1200,
-    overlap: int = 200,
+    chunk_size: int = 400,
+    overlap: int = 80,
     separators: list[str] | None = None,
 ) -> list[str]:
     """
@@ -260,19 +451,19 @@ def pdf_bytes_to_chunks(
     source_url: str = "",
     category: str = "pdf",
     priority: bool = False,
-    chunk_size: int = 1200,
-    overlap: int = 200,
+    chunk_size: int = 400,
+    overlap: int = 80,
 ) -> list:
     """
     Shared utility: extract text from raw PDF bytes and return list[Chunk].
-    Returns an empty list if the PDF has no extractable text (scanned image PDF).
+    Returns an empty list if the PDF has no text layer and OCR cannot extract text.
     Imports Chunk / RAGService at call-time to avoid circular imports.
     """
     from rag_service import Chunk, RAGService  # noqa: PLC0415
 
     text = _extract_text(pdf_bytes)
     if not text:
-        return []  # Caller checks for empty → signals a scanned PDF
+        return []  # Caller treats empty as OCR-unreadable/static PDF
 
     section_title = RAGService.SECTION_TITLES.get(section_id, section_id)
     full_text = f"[{title}]\n\n{text}"
@@ -350,6 +541,8 @@ async def sync_pdfs(rag: "RAGService", force: bool = False) -> SyncResult:
     ])
 
     cache = _load_cache()
+    chunk_cache = load_chunk_cache(_CHUNK_CACHE_FILE)
+    chunk_cache_dirty = False
     result = SyncResult()
 
     async with httpx.AsyncClient(
@@ -379,15 +572,47 @@ async def sync_pdfs(rag: "RAGService", force: bool = False) -> SyncResult:
             # ── Hash check ─────────────────────────────────────────
             content_hash = _sha256(pdf_bytes)
             if not force and cache.get(source.url) == content_hash:
-                print(f"[PDF Sync] ✓  Unchanged — skip: {source.title}")
-                result.skipped += 1
-                continue
+                if rag_has_source(rag, source.url):
+                    print(f"[PDF Sync] ✓  Unchanged — already indexed: {source.title}")
+                    result.skipped += 1
+                    continue
+
+                cached_chunks = get_cached_chunks(
+                    chunk_cache,
+                    source.url,
+                    content_hash,
+                    cache_version=PDF_CHUNK_CACHE_VERSION,
+                )
+                if cached_chunks is not None:
+                    if cached_chunks:
+                        try:
+                            added = rag.add_chunks(cached_chunks)
+                            result.total_chunks += added
+                            print(f"[PDF Sync] ↺  Restored {added} cached chunks — {source.title}")
+                        except Exception as exc:
+                            msg = f"Cached FAISS restore failed — {source.title}: {exc}"
+                            print(f"[PDF Sync] ERR {msg}")
+                            result.errors.append(msg)
+                    else:
+                        print(f"[PDF Sync] ✓  Unchanged OCR-unreadable/empty PDF — {source.title}")
+                    result.skipped += 1
+                    continue
+
+                print(f"[PDF Sync] ↻  Unchanged but no chunk cache — re-extract: {source.title}")
 
             # ── Extract + chunk (run in thread to avoid blocking) ──
             try:
                 chunks = await asyncio.get_event_loop().run_in_executor(
                     None, _pdf_to_chunks, source, pdf_bytes
                 )
+                put_cached_chunks(
+                    chunk_cache,
+                    source.url,
+                    content_hash,
+                    chunks,
+                    cache_version=PDF_CHUNK_CACHE_VERSION,
+                )
+                chunk_cache_dirty = True
             except Exception as exc:
                 msg = f"Text extraction failed — {source.title}: {exc}"
                 print(f"[PDF Sync] ERR {msg}")
@@ -414,6 +639,10 @@ async def sync_pdfs(rag: "RAGService", force: bool = False) -> SyncResult:
     # Persist updated cache
     try:
         await asyncio.get_event_loop().run_in_executor(None, _save_cache, cache)
+        if chunk_cache_dirty:
+            await asyncio.get_event_loop().run_in_executor(
+                None, save_chunk_cache, _CHUNK_CACHE_FILE, chunk_cache
+            )
     except Exception as exc:
         print(f"[PDF Sync] WARNING: could not save cache: {exc}")
 

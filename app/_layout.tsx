@@ -6,6 +6,7 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 
 import { BookmarkProvider } from "@/contexts/BookmarkContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { isOnboardingSeen } from "@/utils/storage";
 import "../global.css";
 
 SplashScreen.preventAutoHideAsync();
@@ -26,7 +27,9 @@ function InitialLayout() {
     const inAuthRoute   = root === "login" || root === "register";
     const inOnboarding  = root === "onboarding";
 
-    if (!token && !inAuthRoute && !inOnboarding) {
+    if (!isOnboardingSeen() && !inOnboarding) {
+      router.replace("/onboarding");
+    } else if (!token && !inAuthRoute && !inOnboarding) {
       router.replace("/login");
     } else if (token && inAuthRoute) {
       router.replace("/(tabs)");

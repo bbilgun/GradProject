@@ -30,6 +30,7 @@ expo-env.d.ts
 # Virtual environments
 venv/
 .venv/
+.venv*/
 env/
 ENV/
 
@@ -70,6 +71,7 @@ pdf_cache.json
 web_cache.json
 backend/pdf_cache.json
 backend/web_cache.json
+backend/*chunk_cache.json
 
 # Stray pip-output artifacts (from misquoted shell redirects)
 backend/=*
